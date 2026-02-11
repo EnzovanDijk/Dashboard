@@ -587,6 +587,31 @@
             white-space: nowrap;
             color: var(--text-secondary);
             font-size: 0.82rem;
+            cursor: text;
+            border-radius: 3px;
+            transition: background var(--transition);
+        }
+
+        .td-note:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .td-note .inline-note {
+            width: 100%;
+            padding: 2px 4px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-focus);
+            border-radius: 3px;
+            color: var(--text-primary);
+            font-size: 0.82rem;
+            font-weight: 400;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+        }
+
+        .td-note-placeholder {
+            color: var(--text-muted);
+            font-style: italic;
         }
 
         .td-actions {
@@ -1628,7 +1653,7 @@
                         <td class="td-time">${task.doeltijd}</td>
                         <td class="td-time">${task.actietijd}</td>
                         <td class="td-time" style="font-size:0.9rem; ${status === 'overdue' ? 'color:var(--danger)' : status === 'warning' ? 'color:var(--warning)' : ''}">${remaining}</td>
-                        <td class="td-note" title="${escapeHtml(task.note)}">${escapeHtml(task.note)}</td>
+                        <td class="td-note" title="${escapeHtml(task.note)}" onclick="editNoteInline(event,'${task.id}')">${escapeHtml(task.note) || '<span class="td-note-placeholder">+ notitie</span>'}</td>
                         <td>
                             <div class="td-actions">
                                 <button class="btn btn-edit btn-sm" onclick="openEditModal(event, '${task.id}')" title="Aanpassen">&#9881;</button>
@@ -1869,6 +1894,38 @@
 
             cell.classList.add('copied');
             setTimeout(() => cell.classList.remove('copied'), 600);
+        });
+    }
+
+    // ── Inline Note Edit ──
+    function editNoteInline(event, id) {
+        event.stopPropagation();
+        const td = event.currentTarget;
+        if (td.querySelector('.inline-note')) return;
+
+        const task = tasks.find(t => t.id === id);
+        if (!task) return;
+
+        const input = document.createElement('input');
+        input.className = 'inline-note';
+        input.type = 'text';
+        input.value = task.note || '';
+        input.placeholder = 'Notitie...';
+
+        td.textContent = '';
+        td.appendChild(input);
+        input.focus();
+
+        function save() {
+            task.note = input.value.trim();
+            saveToStorage();
+            renderTable();
+        }
+
+        input.addEventListener('blur', save);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+            if (e.key === 'Escape') { e.preventDefault(); renderTable(); }
         });
     }
 
