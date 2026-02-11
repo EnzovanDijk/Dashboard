@@ -964,37 +964,97 @@
             border-color: var(--danger) !important;
         }
 
-        /* ===== Inline Edit ===== */
-        .td-editable {
-            cursor: text;
-            border-radius: 3px;
-            transition: background var(--transition);
+        /* ===== Edit Modal ===== */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.6);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
         }
 
-        .td-editable:hover {
-            background: var(--bg-tertiary);
+        .modal-overlay.open {
+            display: flex;
         }
 
-        .td-editable .inline-input {
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 20px;
+            width: 340px;
+            max-width: 90vw;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+            animation: modal-in 200ms ease;
+        }
+
+        @keyframes modal-in {
+            from { opacity: 0; transform: scale(0.95) translateY(8px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
+        }
+
+        .modal-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .modal-fields {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .modal-field label {
+            display: block;
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 4px;
+        }
+
+        .modal-field input {
             width: 100%;
-            padding: 2px 4px;
+            padding: 8px 10px;
             background: var(--bg-input);
-            border: 1px solid var(--border-focus);
-            border-radius: 3px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
             color: var(--text-primary);
-            font: inherit;
-            font-size: inherit;
-            font-weight: inherit;
+            font-size: 0.9rem;
+            transition: border var(--transition);
+        }
+
+        .modal-field input:focus {
             outline: none;
-            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+            border-color: var(--border-focus);
         }
 
-        .td-editable .inline-input.input-time {
-            width: 70px;
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 18px;
         }
 
-        .td-editable .inline-input.input-note {
-            font-weight: 400;
+        .btn-edit {
+            background: transparent;
+            color: var(--text-secondary);
+            border-color: var(--border);
+            padding: 4px 8px;
+            font-size: 0.78rem;
+            line-height: 1;
+        }
+
+        .btn-edit:hover {
+            color: var(--accent);
+            border-color: var(--accent);
+            background: rgba(88, 166, 255, 0.08);
         }
     </style>
 </head>
@@ -1172,6 +1232,31 @@
 
     <!-- Toast Container -->
     <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Edit Modal -->
+    <div class="modal-overlay" id="editModal" onclick="closeEditModal(event)">
+        <div class="modal" onclick="event.stopPropagation()">
+            <div class="modal-title">&#9881; Taak aanpassen</div>
+            <div class="modal-fields">
+                <div class="modal-field">
+                    <label>Wagennummer</label>
+                    <input type="text" id="editWagon">
+                </div>
+                <div class="modal-field">
+                    <label>Actietijd</label>
+                    <input type="time" id="editActietijd">
+                </div>
+                <div class="modal-field">
+                    <label>Notitie</label>
+                    <input type="text" id="editNote" placeholder="optioneel">
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary btn-sm" onclick="closeEditModal()">Annuleren</button>
+                <button class="btn btn-primary btn-sm" onclick="saveEditModal()">Opslaan</button>
+            </div>
+        </div>
+    </div>
 
     <script>
     /* ===================================================================
@@ -1539,13 +1624,14 @@
                             </div>
                         </td>
                         <td><span class="td-category ${catClass}">${catLabel}</span></td>
-                        <td class="td-wagon td-editable" data-wagon-id="${task.id}" onclick="editCell(event,'${task.id}','wagon')">${escapeHtml(task.wagon)}</td>
+                        <td class="td-wagon" data-wagon-id="${task.id}">${escapeHtml(task.wagon)}</td>
                         <td class="td-time">${task.doeltijd}</td>
-                        <td class="td-time td-editable" onclick="editCell(event,'${task.id}','actietijd')">${task.actietijd}</td>
+                        <td class="td-time">${task.actietijd}</td>
                         <td class="td-time" style="font-size:0.9rem; ${status === 'overdue' ? 'color:var(--danger)' : status === 'warning' ? 'color:var(--warning)' : ''}">${remaining}</td>
-                        <td class="td-note td-editable" title="${escapeHtml(task.note)}" onclick="editCell(event,'${task.id}','note')">${escapeHtml(task.note) || '<span style="color:var(--text-muted);font-style:italic">+ notitie</span>'}</td>
+                        <td class="td-note" title="${escapeHtml(task.note)}">${escapeHtml(task.note)}</td>
                         <td>
                             <div class="td-actions">
+                                <button class="btn btn-edit btn-sm" onclick="openEditModal(event, '${task.id}')" title="Aanpassen">&#9881;</button>
                                 <button class="btn btn-danger btn-sm ${isDeleteConfirm ? 'confirm-delete' : ''}" onclick="deleteTask('${task.id}')">
                                     ${isDeleteConfirm ? 'Bevestig' : 'Verwijder'}
                                 </button>
@@ -1746,10 +1832,14 @@
                 toggleDrawer(true);
                 setTimeout(() => document.getElementById('bulkText').focus(), 100);
             }
-            // Escape: clear delete confirm
+            // Escape: close modal or clear delete confirm
             if (e.key === 'Escape') {
-                deleteConfirmId = null;
-                renderTable();
+                if (document.getElementById('editModal').classList.contains('open')) {
+                    closeEditModal();
+                } else {
+                    deleteConfirmId = null;
+                    renderTable();
+                }
             }
         });
     }
@@ -1782,58 +1872,52 @@
         });
     }
 
-    // ── Inline Edit ──
-    function editCell(event, id, field) {
+    // ── Edit Modal ──
+    let editingTaskId = null;
+
+    function openEditModal(event, id) {
         event.stopPropagation();
-        const td = event.currentTarget;
-
-        // Already editing
-        if (td.querySelector('.inline-input')) return;
-
         const task = tasks.find(t => t.id === id);
         if (!task) return;
 
-        const currentValue = task[field] || '';
-        const isTime = field === 'actietijd';
+        editingTaskId = id;
+        document.getElementById('editWagon').value = task.wagon;
+        document.getElementById('editActietijd').value = task.actietijd;
+        document.getElementById('editNote').value = task.note || '';
+        document.getElementById('editModal').classList.add('open');
+        document.getElementById('editWagon').focus();
+    }
 
-        const input = document.createElement('input');
-        input.className = 'inline-input' + (isTime ? ' input-time' : '') + (field === 'note' ? ' input-note' : '');
-        input.type = isTime ? 'time' : 'text';
-        input.value = currentValue;
-        if (field === 'wagon') input.placeholder = 'Wagennr';
-        if (field === 'note') input.placeholder = 'Notitie...';
+    function closeEditModal(event) {
+        if (event && event.target !== event.currentTarget) return;
+        document.getElementById('editModal').classList.remove('open');
+        editingTaskId = null;
+    }
 
-        td.textContent = '';
-        td.appendChild(input);
-        input.focus();
-        input.select();
+    function saveEditModal() {
+        const task = tasks.find(t => t.id === editingTaskId);
+        if (!task) return;
 
-        function save() {
-            const newVal = input.value.trim();
-            if (field === 'wagon' && !newVal) {
-                renderTable();
-                return;
-            }
-            if (isTime && newVal) {
-                const parsed = parseTime(newVal);
-                if (!parsed) {
-                    showToast('Ongeldig tijdformaat', 'error');
-                    renderTable();
-                    return;
-                }
-                task[field] = formatTime(parsed.hours, parsed.minutes);
-            } else {
-                task[field] = newVal;
-            }
-            saveToStorage();
-            renderTable();
+        const wagon = document.getElementById('editWagon').value.trim();
+        const actietijd = document.getElementById('editActietijd').value;
+        const note = document.getElementById('editNote').value.trim();
+
+        if (!wagon) {
+            showToast('Wagennummer mag niet leeg zijn', 'error');
+            return;
+        }
+        if (!actietijd) {
+            showToast('Actietijd mag niet leeg zijn', 'error');
+            return;
         }
 
-        input.addEventListener('blur', save);
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
-            if (e.key === 'Escape') { e.preventDefault(); renderTable(); }
-        });
+        task.wagon = wagon;
+        task.actietijd = actietijd;
+        task.note = note;
+        saveToStorage();
+        renderTable();
+        closeEditModal();
+        showToast('Taak aangepast', 'success');
     }
 
     // ── Utility ──
