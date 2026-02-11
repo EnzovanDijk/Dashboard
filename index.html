@@ -1159,9 +1159,33 @@
     function searchMap() {
         const query = document.getElementById('mapSearch').value.trim();
         if (!query) return;
-        const frame = document.getElementById('mapFrame');
-        frame.src = 'https://www.google.com/maps?q=' + encodeURIComponent(query) + '&output=embed';
-        mapShowingSearch = true;
+        const searchBtn = document.querySelector('.map-toolbar .btn-primary');
+        searchBtn.textContent = 'Zoeken...';
+        searchBtn.disabled = true;
+
+        // Geocode with Nominatim, then recenter the custom map so laadlocaties stay visible
+        fetch('https://nominatim.openstreetmap.org/search?format=json&countrycodes=nl&limit=1&q=' + encodeURIComponent(query))
+            .then(r => r.json())
+            .then(results => {
+                if (results.length === 0) {
+                    showToast('Locatie niet gevonden', 'error');
+                    return;
+                }
+                const lat = parseFloat(results[0].lat);
+                const lon = parseFloat(results[0].lon);
+                const frame = document.getElementById('mapFrame');
+                // Rebuild the custom map URL centered on the searched location at a closer zoom
+                frame.src = 'https://www.google.com/maps/d/embed?mid=1_VQAo_eE5hjAppjnbdGVTUh07P55kiQ&ll='
+                    + lat + '%2C' + lon + '&z=13';
+                mapShowingSearch = true;
+            })
+            .catch(() => {
+                showToast('Zoeken mislukt, probeer opnieuw', 'error');
+            })
+            .finally(() => {
+                searchBtn.textContent = 'Zoeken';
+                searchBtn.disabled = false;
+            });
     }
 
     function resetMap() {
