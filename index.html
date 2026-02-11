@@ -221,12 +221,62 @@
             border-color: var(--border-focus);
         }
 
+        /* ===== Invoer Drawer ===== */
+        .drawer-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            margin-bottom: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--accent);
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition);
+            width: auto;
+            display: inline-flex;
+        }
+
+        .drawer-toggle:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--accent);
+        }
+
+        .drawer-toggle-icon {
+            display: inline-block;
+            transition: transform 200ms ease;
+            font-size: 0.75rem;
+        }
+
+        .drawer-toggle.open .drawer-toggle-icon {
+            transform: rotate(180deg);
+        }
+
+        .drawer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 350ms cubic-bezier(0.4, 0, 0.2, 1), opacity 250ms ease;
+            opacity: 0;
+        }
+
+        .drawer.open {
+            max-height: 800px;
+            opacity: 1;
+        }
+
+        .drawer-inner {
+            padding-bottom: 16px;
+        }
+
         /* ===== Panels ===== */
         .panels {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 16px;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
 
         @media (max-width: 900px) {
@@ -788,78 +838,89 @@
             </div>
         </header>
 
-        <!-- Settings -->
-        <div class="settings-bar">
-            <label>
-                Waarschuwingsmarge:
-                <input type="number" id="warningMinutes" min="1" max="120" value="15">
-                min
-            </label>
-            <label>
-                Standaard actietijd (laadpauze):
-                <input type="number" id="defaultOffset" min="1" max="240" value="60">
-                min vóór pauze
-            </label>
-        </div>
+        <!-- Drawer Toggle -->
+        <button class="drawer-toggle" id="drawerToggle" onclick="toggleDrawer()">
+            <span class="drawer-toggle-icon">&#9660;</span>
+            Nieuwe invoer &amp; instellingen
+        </button>
 
-        <!-- Input Panels -->
-        <div class="panels">
-            <!-- Manual Entry -->
-            <div class="panel">
-                <div class="panel-title">
-                    <span class="panel-title-icon">+</span>
-                    Handmatige Invoer
-                    <span class="kbd">Ctrl+N</span>
+        <!-- Collapsible Drawer -->
+        <div class="drawer" id="drawer">
+            <div class="drawer-inner">
+                <!-- Settings -->
+                <div class="settings-bar">
+                    <label>
+                        Waarschuwingsmarge:
+                        <input type="number" id="warningMinutes" min="1" max="120" value="15">
+                        min
+                    </label>
+                    <label>
+                        Standaard actietijd (laadpauze):
+                        <input type="number" id="defaultOffset" min="1" max="240" value="60">
+                        min vóór pauze
+                    </label>
                 </div>
-                <form id="manualForm" autocomplete="off">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label>Type</label>
-                            <select id="formType">
-                                <option value="laadpauze">Laadpauze</option>
-                                <option value="prio">Prio</option>
-                            </select>
+
+                <!-- Input Panels -->
+                <div class="panels">
+                    <!-- Manual Entry -->
+                    <div class="panel">
+                        <div class="panel-title">
+                            <span class="panel-title-icon">+</span>
+                            Handmatige Invoer
+                            <span class="kbd">Ctrl+N</span>
                         </div>
-                        <div class="form-group">
-                            <label>Wagennummer</label>
-                            <input type="text" id="formWagon" placeholder="bijv. 2624" required>
+                        <form id="manualForm" autocomplete="off">
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Type</label>
+                                    <select id="formType">
+                                        <option value="laadpauze">Laadpauze</option>
+                                        <option value="prio">Prio</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Wagennummer</label>
+                                    <input type="text" id="formWagon" placeholder="bijv. 2624" required>
+                                </div>
+                                <div class="form-group">
+                                    <label id="labelDoeltijd">Pauzetijd</label>
+                                    <input type="time" id="formDoeltijd" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>Actietijd</label>
+                                    <input type="time" id="formActietijd" placeholder="auto">
+                                </div>
+                                <div class="form-group">
+                                    <label>Notitie</label>
+                                    <input type="text" id="formNote" placeholder="optioneel">
+                                </div>
+                                <div class="form-group form-check">
+                                    <input type="checkbox" id="formAutoCalc" checked>
+                                    <label for="formAutoCalc">Auto actietijd</label>
+                                </div>
+                                <div class="form-group form-actions">
+                                    <button type="submit" class="btn btn-primary">Toevoegen</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Bulk Import -->
+                    <div class="panel">
+                        <div class="panel-title">
+                            <span class="panel-title-icon">&#8645;</span>
+                            Bulk Import
+                            <span class="kbd">Ctrl+B</span>
                         </div>
-                        <div class="form-group">
-                            <label id="labelDoeltijd">Pauzetijd</label>
-                            <input type="time" id="formDoeltijd" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Actietijd</label>
-                            <input type="time" id="formActietijd" placeholder="auto">
-                        </div>
-                        <div class="form-group">
-                            <label>Notitie</label>
-                            <input type="text" id="formNote" placeholder="optioneel">
-                        </div>
-                        <div class="form-group form-check">
-                            <input type="checkbox" id="formAutoCalc" checked>
-                            <label for="formAutoCalc">Auto actietijd</label>
-                        </div>
-                        <div class="form-group form-actions">
-                            <button type="submit" class="btn btn-primary">Toevoegen</button>
+                        <textarea class="bulk-textarea" id="bulkText" placeholder="Plak hier meerdere regels, bijv:&#10;2624 10.00 0900&#10;753 1145 1030&#10;750 12:30 11:00"></textarea>
+                        <div class="bulk-hint">Formaat: wagennr doeltijd actietijd — ondersteunt HH:MM, HH.MM en HHMM notatie</div>
+                        <div class="bulk-actions">
+                            <button class="btn btn-primary btn-sm" onclick="bulkImport('laadpauze')">Importeer als Laadpauze</button>
+                            <button class="btn btn-secondary btn-sm" onclick="bulkImport('prio')">Importeer als Prio</button>
+                            <button class="btn btn-danger btn-sm" onclick="clearBulk()">Wissen</button>
                         </div>
                     </div>
-                </form>
-            </div>
-
-            <!-- Bulk Import -->
-            <div class="panel">
-                <div class="panel-title">
-                    <span class="panel-title-icon">&#8645;</span>
-                    Bulk Import
-                    <span class="kbd">Ctrl+B</span>
-                </div>
-                <textarea class="bulk-textarea" id="bulkText" placeholder="Plak hier meerdere regels, bijv:&#10;2624 10.00 0900&#10;753 1145 1030&#10;750 12:30 11:00"></textarea>
-                <div class="bulk-hint">Formaat: wagennr doeltijd actietijd — ondersteunt HH:MM, HH.MM en HHMM notatie</div>
-                <div class="bulk-actions">
-                    <button class="btn btn-primary btn-sm" onclick="bulkImport('laadpauze')">Importeer als Laadpauze</button>
-                    <button class="btn btn-secondary btn-sm" onclick="bulkImport('prio')">Importeer als Prio</button>
-                    <button class="btn btn-danger btn-sm" onclick="clearBulk()">Wissen</button>
                 </div>
             </div>
         </div>
@@ -944,6 +1005,16 @@
         const isLight = document.documentElement.classList.toggle('light-mode');
         document.getElementById('themeLabel').textContent = isLight ? 'Donker' : 'Licht';
         localStorage.setItem(STORAGE_KEY + '-theme', isLight ? 'light' : 'dark');
+    }
+
+    // ── Drawer ──
+    function toggleDrawer(forceOpen) {
+        const drawer = document.getElementById('drawer');
+        const toggle = document.getElementById('drawerToggle');
+        const shouldOpen = forceOpen === true ? true : !drawer.classList.contains('open');
+
+        drawer.classList.toggle('open', shouldOpen);
+        toggle.classList.toggle('open', shouldOpen);
     }
 
     // ── Clock ──
@@ -1399,15 +1470,17 @@
     // ── Keyboard Shortcuts ──
     function setupKeyboardShortcuts() {
         document.addEventListener('keydown', (e) => {
-            // Ctrl+N: focus wagon input
+            // Ctrl+N: open drawer & focus wagon input
             if (e.ctrlKey && e.key === 'n') {
                 e.preventDefault();
-                document.getElementById('formWagon').focus();
+                toggleDrawer(true);
+                setTimeout(() => document.getElementById('formWagon').focus(), 100);
             }
-            // Ctrl+B: focus bulk textarea
+            // Ctrl+B: open drawer & focus bulk textarea
             if (e.ctrlKey && e.key === 'b') {
                 e.preventDefault();
-                document.getElementById('bulkText').focus();
+                toggleDrawer(true);
+                setTimeout(() => document.getElementById('bulkText').focus(), 100);
             }
             // Escape: clear delete confirm
             if (e.key === 'Escape') {
