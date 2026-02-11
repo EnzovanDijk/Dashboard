@@ -31,6 +31,65 @@
             --transition: 150ms ease;
         }
 
+        /* ===== Light Mode ===== */
+        .light-mode {
+            --bg-primary: #f6f8fa;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #f0f2f5;
+            --bg-input: #ffffff;
+            --border: #d1d9e0;
+            --border-focus: #0969da;
+            --text-primary: #1f2328;
+            --text-secondary: #656d76;
+            --text-muted: #8b949e;
+            --accent: #0969da;
+            --accent-hover: #0550ae;
+            --warning: #9a6700;
+            --warning-bg: rgba(154, 103, 0, 0.1);
+            --danger: #d1242f;
+            --danger-bg: rgba(209, 36, 47, 0.1);
+            --success: #1a7f37;
+            --success-bg: rgba(26, 127, 55, 0.08);
+            --shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .light-mode .cat-laadpauze {
+            background: rgba(9, 105, 218, 0.1);
+        }
+
+        .light-mode .cat-prio {
+            background: rgba(154, 103, 0, 0.1);
+        }
+
+        .light-mode .badge-open {
+            border-color: rgba(209, 36, 47, 0.25);
+        }
+
+        .light-mode .badge-warning {
+            border-color: rgba(154, 103, 0, 0.25);
+        }
+
+        .light-mode .badge-done {
+            border-color: rgba(26, 127, 55, 0.25);
+        }
+
+        .light-mode .toast {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+
+        .light-mode ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        @keyframes pulse-red-light {
+            0%, 100% { background: rgba(209, 36, 47, 0.1); }
+            50% { background: rgba(209, 36, 47, 0.2); }
+        }
+
+        .light-mode .row-overdue {
+            animation-name: pulse-red-light;
+        }
+
         *, *::before, *::after {
             box-sizing: border-box;
             margin: 0;
@@ -651,6 +710,55 @@
             vertical-align: middle;
         }
 
+        /* ===== Theme Toggle ===== */
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .theme-toggle-label {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+        }
+
+        .theme-toggle-track {
+            position: relative;
+            width: 48px;
+            height: 26px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 13px;
+            transition: background var(--transition), border-color var(--transition);
+            cursor: pointer;
+        }
+
+        .theme-toggle-track:hover {
+            border-color: var(--text-muted);
+        }
+
+        .theme-toggle-thumb {
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            transition: transform 200ms ease, background 200ms ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .light-mode .theme-toggle-thumb {
+            transform: translateX(22px);
+            background: var(--accent);
+        }
+
         /* ===== Delete confirmation ===== */
         .confirm-delete {
             background: var(--danger) !important;
@@ -670,6 +778,12 @@
                 <div class="badge badge-done" id="badge-done"><span class="badge-dot"></span> <span id="count-done">0</span> afgerond</div>
             </div>
             <div class="header-right">
+                <div class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Wissel tussen licht/donker modus">
+                    <span class="theme-toggle-label" id="themeLabel">Licht</span>
+                    <div class="theme-toggle-track">
+                        <div class="theme-toggle-thumb" id="themeThumb"></div>
+                    </div>
+                </div>
                 <div class="clock" id="clock">--:--:--</div>
             </div>
         </header>
@@ -807,6 +921,7 @@
     // ── Init ──
     document.addEventListener('DOMContentLoaded', () => {
         loadFromStorage();
+        loadTheme();
         updateClock();
         setInterval(updateClock, 1000);
         setInterval(renderTable, 5000); // re-evaluate row states every 5s
@@ -815,6 +930,21 @@
         setupKeyboardShortcuts();
         loadSettings();
     });
+
+    // ── Theme ──
+    function loadTheme() {
+        const saved = localStorage.getItem(STORAGE_KEY + '-theme');
+        if (saved === 'light') {
+            document.documentElement.classList.add('light-mode');
+            document.getElementById('themeLabel').textContent = 'Donker';
+        }
+    }
+
+    function toggleTheme() {
+        const isLight = document.documentElement.classList.toggle('light-mode');
+        document.getElementById('themeLabel').textContent = isLight ? 'Donker' : 'Licht';
+        localStorage.setItem(STORAGE_KEY + '-theme', isLight ? 'light' : 'dark');
+    }
 
     // ── Clock ──
     function updateClock() {
