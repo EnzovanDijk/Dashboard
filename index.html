@@ -844,6 +844,51 @@
             border: none;
         }
 
+        .map-frame-wrap {
+            position: relative;
+        }
+
+        .map-pin {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -100%);
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .map-pin.visible {
+            display: block;
+        }
+
+        .map-pin-icon {
+            width: 18px;
+            height: 18px;
+            background: var(--accent);
+            border: 3px solid #fff;
+            border-radius: 50% 50% 50% 0;
+            transform: rotate(-45deg);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+        }
+
+        .map-pin-pulse {
+            position: absolute;
+            bottom: -2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 12px;
+            height: 12px;
+            background: rgba(88, 166, 255, 0.35);
+            border-radius: 50%;
+            animation: pin-pulse 1.5s ease-out infinite;
+        }
+
+        @keyframes pin-pulse {
+            0% { transform: translateX(-50%) scale(1); opacity: 0.7; }
+            100% { transform: translateX(-50%) scale(3.5); opacity: 0; }
+        }
+
         @media (max-width: 600px) {
             .map-container iframe {
                 height: 350px;
@@ -918,6 +963,39 @@
             color: #fff !important;
             border-color: var(--danger) !important;
         }
+
+        /* ===== Inline Edit ===== */
+        .td-editable {
+            cursor: text;
+            border-radius: 3px;
+            transition: background var(--transition);
+        }
+
+        .td-editable:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .td-editable .inline-input {
+            width: 100%;
+            padding: 2px 4px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-focus);
+            border-radius: 3px;
+            color: var(--text-primary);
+            font: inherit;
+            font-size: inherit;
+            font-weight: inherit;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+        }
+
+        .td-editable .inline-input.input-time {
+            width: 70px;
+        }
+
+        .td-editable .inline-input.input-note {
+            font-weight: 400;
+        }
     </style>
 </head>
 <body>
@@ -961,7 +1039,13 @@
                     <button class="btn btn-primary btn-sm" onclick="searchMap()">Zoeken</button>
                     <button class="btn btn-secondary btn-sm" onclick="resetMap()">Terug naar kaart</button>
                 </div>
-                <iframe id="mapFrame" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade" src=""></iframe>
+                <div class="map-frame-wrap">
+                    <iframe id="mapFrame" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade" src=""></iframe>
+                    <div class="map-pin" id="mapPin">
+                        <div class="map-pin-icon"></div>
+                        <div class="map-pin-pulse"></div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1178,6 +1262,7 @@
                 frame.src = 'https://www.google.com/maps/d/embed?mid=1_VQAo_eE5hjAppjnbdGVTUh07P55kiQ&ll='
                     + lat + '%2C' + lon + '&z=13';
                 mapShowingSearch = true;
+                document.getElementById('mapPin').classList.add('visible');
             })
             .catch(() => {
                 showToast('Zoeken mislukt, probeer opnieuw', 'error');
@@ -1192,6 +1277,7 @@
         const frame = document.getElementById('mapFrame');
         frame.src = MAP_SRC;
         document.getElementById('mapSearch').value = '';
+        document.getElementById('mapPin').classList.remove('visible');
         mapShowingSearch = false;
     }
 
@@ -1453,11 +1539,11 @@
                             </div>
                         </td>
                         <td><span class="td-category ${catClass}">${catLabel}</span></td>
-                        <td class="td-wagon" data-wagon-id="${task.id}">${escapeHtml(task.wagon)}</td>
+                        <td class="td-wagon td-editable" data-wagon-id="${task.id}" onclick="editCell(event,'${task.id}','wagon')">${escapeHtml(task.wagon)}</td>
                         <td class="td-time">${task.doeltijd}</td>
-                        <td class="td-time">${task.actietijd}</td>
+                        <td class="td-time td-editable" onclick="editCell(event,'${task.id}','actietijd')">${task.actietijd}</td>
                         <td class="td-time" style="font-size:0.9rem; ${status === 'overdue' ? 'color:var(--danger)' : status === 'warning' ? 'color:var(--warning)' : ''}">${remaining}</td>
-                        <td class="td-note" title="${escapeHtml(task.note)}">${escapeHtml(task.note)}</td>
+                        <td class="td-note td-editable" title="${escapeHtml(task.note)}" onclick="editCell(event,'${task.id}','note')">${escapeHtml(task.note) || '<span style="color:var(--text-muted);font-style:italic">+ notitie</span>'}</td>
                         <td>
                             <div class="td-actions">
                                 <button class="btn btn-danger btn-sm ${isDeleteConfirm ? 'confirm-delete' : ''}" onclick="deleteTask('${task.id}')">
@@ -1693,6 +1779,60 @@
 
             cell.classList.add('copied');
             setTimeout(() => cell.classList.remove('copied'), 600);
+        });
+    }
+
+    // ── Inline Edit ──
+    function editCell(event, id, field) {
+        event.stopPropagation();
+        const td = event.currentTarget;
+
+        // Already editing
+        if (td.querySelector('.inline-input')) return;
+
+        const task = tasks.find(t => t.id === id);
+        if (!task) return;
+
+        const currentValue = task[field] || '';
+        const isTime = field === 'actietijd';
+
+        const input = document.createElement('input');
+        input.className = 'inline-input' + (isTime ? ' input-time' : '') + (field === 'note' ? ' input-note' : '');
+        input.type = isTime ? 'time' : 'text';
+        input.value = currentValue;
+        if (field === 'wagon') input.placeholder = 'Wagennr';
+        if (field === 'note') input.placeholder = 'Notitie...';
+
+        td.textContent = '';
+        td.appendChild(input);
+        input.focus();
+        input.select();
+
+        function save() {
+            const newVal = input.value.trim();
+            if (field === 'wagon' && !newVal) {
+                renderTable();
+                return;
+            }
+            if (isTime && newVal) {
+                const parsed = parseTime(newVal);
+                if (!parsed) {
+                    showToast('Ongeldig tijdformaat', 'error');
+                    renderTable();
+                    return;
+                }
+                task[field] = formatTime(parsed.hours, parsed.minutes);
+            } else {
+                task[field] = newVal;
+            }
+            saveToStorage();
+            renderTable();
+        }
+
+        input.addEventListener('blur', save);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+            if (e.key === 'Escape') { e.preventDefault(); renderTable(); }
         });
     }
 
