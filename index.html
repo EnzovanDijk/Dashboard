@@ -557,27 +557,8 @@
 
         .td-wagon.copied {
             color: var(--accent);
-            transition: color 150ms ease;
-        }
-
-        .td-wagon .copy-flash {
-            position: absolute;
-            left: 100%;
-            margin-left: 4px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 0.65rem;
-            color: var(--accent);
-            opacity: 0;
-            animation: copy-fade 1s ease forwards;
-            pointer-events: none;
-            white-space: nowrap;
-        }
-
-        @keyframes copy-fade {
-            0% { opacity: 0; transform: translateY(-50%); }
-            15% { opacity: 1; transform: translateY(-50%); }
-            100% { opacity: 0; transform: translateY(-50%) translateX(6px); }
+            text-shadow: 0 0 8px var(--accent), 0 0 16px rgba(88, 166, 255, 0.3);
+            transition: color 100ms ease, text-shadow 100ms ease;
         }
 
         .td-category {
@@ -1686,21 +1667,8 @@
             const cell = document.querySelector(`.td-wagon[data-wagon-id="${id}"]`);
             if (!cell) return;
 
-            // Flash the wagon number
             cell.classList.add('copied');
-            // Remove any existing flash label
-            const existing = cell.querySelector('.copy-flash');
-            if (existing) existing.remove();
-
-            const flash = document.createElement('span');
-            flash.className = 'copy-flash';
-            flash.textContent = 'gekopieerd';
-            cell.appendChild(flash);
-
-            setTimeout(() => {
-                cell.classList.remove('copied');
-                flash.remove();
-            }, 1000);
+            setTimeout(() => cell.classList.remove('copied'), 600);
         });
     }
 
