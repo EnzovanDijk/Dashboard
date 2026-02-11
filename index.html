@@ -531,6 +531,7 @@
         tbody tr {
             border-bottom: 1px solid var(--border);
             transition: background var(--transition), opacity var(--transition);
+            cursor: pointer;
         }
 
         tbody tr:last-child {
@@ -551,6 +552,31 @@
         .td-wagon {
             font-weight: 700;
             font-size: 1rem;
+            position: relative;
+        }
+
+        .td-wagon.copied {
+            color: var(--accent);
+            transition: color 150ms ease;
+        }
+
+        .td-wagon .copy-flash {
+            position: absolute;
+            right: -4px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.65rem;
+            color: var(--accent);
+            opacity: 0;
+            animation: copy-fade 1s ease forwards;
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        @keyframes copy-fade {
+            0% { opacity: 0; transform: translateY(-50%) translateX(0); }
+            15% { opacity: 1; }
+            100% { opacity: 0; transform: translateY(-50%) translateX(8px); }
         }
 
         .td-category {
@@ -946,7 +972,7 @@
                         <tr>
                             <th style="width:40px"></th>
                             <th>Categorie</th>
-                            <th>Wagon</th>
+                            <th>Wagen</th>
                             <th>Doeltijd</th>
                             <th>Actietijd</th>
                             <th>Resterend</th>
@@ -1268,14 +1294,14 @@
                 const isDeleteConfirm = deleteConfirmId === task.id;
 
                 return `
-                    <tr class="${rowClass}" data-id="${task.id}">
+                    <tr class="${rowClass}" data-id="${task.id}" onclick="copyWagon(event, '${task.id}')">
                         <td>
                             <div class="checkbox-wrap">
                                 <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleDone('${task.id}')" title="Markeer als afgehandeld">
                             </div>
                         </td>
                         <td><span class="td-category ${catClass}">${catLabel}</span></td>
-                        <td class="td-wagon">${escapeHtml(task.wagon)}</td>
+                        <td class="td-wagon" data-wagon-id="${task.id}">${escapeHtml(task.wagon)}</td>
                         <td class="td-time">${task.doeltijd}</td>
                         <td class="td-time">${task.actietijd}</td>
                         <td class="td-time" style="font-size:0.9rem; ${status === 'overdue' ? 'color:var(--danger)' : status === 'warning' ? 'color:var(--warning)' : ''}">${remaining}</td>
@@ -1498,6 +1524,37 @@
         toast.textContent = message;
         container.appendChild(toast);
         setTimeout(() => toast.remove(), 3000);
+    }
+
+    // ── Copy Wagon ──
+    function copyWagon(event, id) {
+        // Don't copy when clicking checkbox, button, or input
+        const tag = event.target.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'button') return;
+
+        const task = tasks.find(t => t.id === id);
+        if (!task) return;
+
+        navigator.clipboard.writeText(task.wagon).then(() => {
+            const cell = document.querySelector(`.td-wagon[data-wagon-id="${id}"]`);
+            if (!cell) return;
+
+            // Flash the wagon number
+            cell.classList.add('copied');
+            // Remove any existing flash label
+            const existing = cell.querySelector('.copy-flash');
+            if (existing) existing.remove();
+
+            const flash = document.createElement('span');
+            flash.className = 'copy-flash';
+            flash.textContent = 'gekopieerd';
+            cell.appendChild(flash);
+
+            setTimeout(() => {
+                cell.classList.remove('copied');
+                flash.remove();
+            }, 1000);
+        });
     }
 
     // ── Utility ──
