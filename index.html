@@ -816,7 +816,7 @@
         }
 
         .map-drawer.open {
-            max-height: 600px;
+            max-height: 700px;
             opacity: 1;
             margin-bottom: 16px;
         }
@@ -828,10 +828,38 @@
             overflow: hidden;
         }
 
+        .map-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .map-toolbar input[type="text"] {
+            flex: 1;
+            padding: 7px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }
+
+        .map-toolbar input[type="text"]:focus {
+            outline: none;
+            border-color: var(--border-focus);
+        }
+
+        .map-toolbar input[type="text"]::placeholder {
+            color: var(--text-muted);
+        }
+
         .map-container iframe {
             display: block;
             width: 100%;
-            height: 500px;
+            height: 550px;
             border: none;
         }
 
@@ -947,6 +975,11 @@
         <!-- Collapsible Map -->
         <div class="map-drawer" id="mapDrawer">
             <div class="map-container">
+                <div class="map-toolbar">
+                    <input type="text" id="mapSearch" placeholder="Zoek postcode of adres..." onkeydown="if(event.key==='Enter')searchMap()">
+                    <button class="btn btn-primary btn-sm" onclick="searchMap()">Zoeken</button>
+                    <button class="btn btn-secondary btn-sm" onclick="resetMap()">Terug naar kaart</button>
+                </div>
                 <iframe id="mapFrame" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade" src=""></iframe>
             </div>
         </div>
@@ -1127,6 +1160,7 @@
     // ── Map ──
     const MAP_SRC = 'https://www.google.com/maps/d/embed?mid=1_VQAo_eE5hjAppjnbdGVTUh07P55kiQ&ll=52.27112583734776%2C5.04943419683487&z=11';
     let mapLoaded = false;
+    let mapShowingSearch = false;
 
     function toggleMap() {
         const drawer = document.getElementById('mapDrawer');
@@ -1139,6 +1173,21 @@
             document.getElementById('mapFrame').src = MAP_SRC;
             mapLoaded = true;
         }
+    }
+
+    function searchMap() {
+        const query = document.getElementById('mapSearch').value.trim();
+        if (!query) return;
+        const frame = document.getElementById('mapFrame');
+        frame.src = 'https://www.google.com/maps?q=' + encodeURIComponent(query) + '&output=embed';
+        mapShowingSearch = true;
+    }
+
+    function resetMap() {
+        const frame = document.getElementById('mapFrame');
+        frame.src = MAP_SRC;
+        document.getElementById('mapSearch').value = '';
+        mapShowingSearch = false;
     }
 
     // ── Clock ──
