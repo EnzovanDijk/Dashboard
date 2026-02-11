@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voertuig Actie Planner</title>
+    <style>
+        /* ===== CSS Variables & Reset ===== */
+        :root {
+            --bg-primary: #0d1117;
+            --bg-secondary: #161b22;
+            --bg-tertiary: #21262d;
+            --bg-input: #0d1117;
+            --border: #30363d;
+            --border-focus: #58a6ff;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
+            --accent: #58a6ff;
+            --accent-hover: #79c0ff;
+            --warning: #d29922;
+            --warning-bg: rgba(210, 153, 34, 0.15);
+            --danger: #f85149;
+            --danger-bg: rgba(248, 81, 73, 0.15);
+            --success: #3fb950;
+            --success-bg: rgba(63, 185, 80, 0.1);
+            --done-opacity: 0.35;
+            --radius: 6px;
+            --radius-lg: 10px;
+            --shadow: 0 1px 3px rgba(0,0,0,0.3);
+            --transition: 150ms ease;
+        }
+
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        /* ===== Layout ===== */
+        .app {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 16px 20px;
+        }
+
+        /* ===== Header ===== */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0 16px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header h1 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+        }
+
+        .clock {
+            font-size: 2rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            color: var(--accent);
+            letter-spacing: 0.02em;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-open {
+            background: var(--danger-bg);
+            color: var(--danger);
+            border: 1px solid rgba(248, 81, 73, 0.3);
+        }
+
+        .badge-warning {
+            background: var(--warning-bg);
+            color: var(--warning);
+            border: 1px solid rgba(210, 153, 34, 0.3);
+        }
+
+        .badge-done {
+            background: var(--success-bg);
+            color: var(--success);
+            border: 1px solid rgba(63, 185, 80, 0.3);
+        }
+
+        .badge-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        /* ===== Settings Bar ===== */
+        .settings-bar {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 10px 14px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .settings-bar label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .settings-bar input[type="number"] {
+            width: 60px;
+            padding: 4px 8px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-size: 0.8rem;
+            text-align: center;
+        }
+
+        .settings-bar input[type="number"]:focus {
+            outline: none;
+            border-color: var(--border-focus);
+        }
+
+        /* ===== Panels ===== */
+        .panels {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .panels { grid-template-columns: 1fr; }
+        }
+
+        .panel {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 16px;
+        }
+
+        .panel-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-title-icon {
+            font-size: 1rem;
+        }
+
+        /* ===== Form ===== */
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 10px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .form-group label {
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .form-group select,
+        .form-group input[type="text"],
+        .form-group input[type="time"] {
+            padding: 8px 10px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            transition: border var(--transition);
+        }
+
+        .form-group select:focus,
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--border-focus);
+        }
+
+        .form-check {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding-top: 20px;
+        }
+
+        .form-check label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .form-actions {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+        }
+
+        /* ===== Buttons ===== */
+        .btn {
+            padding: 8px 16px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all var(--transition);
+            white-space: nowrap;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            border-color: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border);
+        }
+
+        .btn-danger {
+            background: transparent;
+            color: var(--danger);
+            border-color: rgba(248, 81, 73, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: var(--danger-bg);
+        }
+
+        .btn-sm {
+            padding: 4px 10px;
+            font-size: 0.78rem;
+        }
+
+        /* ===== Bulk Import ===== */
+        .bulk-textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--text-primary);
+            font-family: 'SF Mono', 'Fira Code', monospace;
+            font-size: 0.85rem;
+            resize: vertical;
+            line-height: 1.6;
+        }
+
+        .bulk-textarea:focus {
+            outline: none;
+            border-color: var(--border-focus);
+        }
+
+        .bulk-textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        .bulk-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+
+        .bulk-hint {
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        /* ===== Table ===== */
+        .table-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .table-header-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .table-header-bar h2 {
+            font-size: 0.95rem;
+            font-weight: 600;
+        }
+
+        .table-filters {
+            display: flex;
+            gap: 6px;
+        }
+
+        .filter-btn {
+            padding: 4px 12px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+
+        .filter-btn:hover {
+            border-color: var(--text-secondary);
+            color: var(--text-primary);
+        }
+
+        .filter-btn.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .table-scroll {
+            overflow-x: auto;
+            max-height: 65vh;
+            overflow-y: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        thead th {
+            background: var(--bg-tertiary);
+            padding: 10px 14px;
+            text-align: left;
+            font-size: 0.72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border);
+            white-space: nowrap;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid var(--border);
+            transition: background var(--transition), opacity var(--transition);
+        }
+
+        tbody tr:last-child {
+            border-bottom: none;
+        }
+
+        tbody td {
+            padding: 10px 14px;
+            vertical-align: middle;
+        }
+
+        .td-time {
+            font-variant-numeric: tabular-nums;
+            font-weight: 600;
+            font-size: 1.05rem;
+        }
+
+        .td-wagon {
+            font-weight: 700;
+            font-size: 1rem;
+        }
+
+        .td-category {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .cat-laadpauze {
+            background: rgba(88, 166, 255, 0.15);
+            color: var(--accent);
+        }
+
+        .cat-prio {
+            background: rgba(210, 153, 34, 0.15);
+            color: var(--warning);
+        }
+
+        .td-note {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text-secondary);
+            font-size: 0.82rem;
+        }
+
+        .td-actions {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+        }
+
+        /* ===== Checkbox Custom ===== */
+        .checkbox-wrap {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .checkbox-wrap input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 22px;
+            height: 22px;
+            border: 2px solid var(--border);
+            border-radius: 4px;
+            background: var(--bg-input);
+            cursor: pointer;
+            position: relative;
+            transition: all var(--transition);
+        }
+
+        .checkbox-wrap input[type="checkbox"]:checked {
+            background: var(--success);
+            border-color: var(--success);
+        }
+
+        .checkbox-wrap input[type="checkbox"]:checked::after {
+            content: '✓';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        /* ===== Row States ===== */
+        .row-done {
+            opacity: var(--done-opacity);
+        }
+
+        .row-done td {
+            text-decoration: line-through;
+            text-decoration-color: var(--text-muted);
+        }
+
+        .row-done .checkbox-wrap input[type="checkbox"],
+        .row-done .td-actions .btn {
+            text-decoration: none;
+        }
+
+        .row-warning {
+            background: var(--warning-bg) !important;
+        }
+
+        .row-overdue {
+            background: var(--danger-bg) !important;
+            animation: pulse-red 1.2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-red {
+            0%, 100% { background: var(--danger-bg); }
+            50% { background: rgba(248, 81, 73, 0.3); }
+        }
+
+        .row-overdue .td-time {
+            color: var(--danger);
+        }
+
+        /* ===== Toast ===== */
+        .toast-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            padding: 10px 16px;
+            border-radius: var(--radius);
+            font-size: 0.85rem;
+            font-weight: 500;
+            animation: toast-in 300ms ease, toast-out 300ms ease 2.7s forwards;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        .toast-success {
+            background: #1a7f37;
+            color: #fff;
+        }
+
+        .toast-error {
+            background: #da3633;
+            color: #fff;
+        }
+
+        .toast-info {
+            background: #1f6feb;
+            color: #fff;
+        }
+
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes toast-out {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        /* ===== Empty State ===== */
+        .empty-state {
+            text-align: center;
+            padding: 48px 20px;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 2.5rem;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .empty-state p {
+            font-size: 0.9rem;
+        }
+
+        /* ===== Scrollbar ===== */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-muted);
+        }
+
+        /* ===== Responsive ===== */
+        @media (max-width: 600px) {
+            .app { padding: 10px; }
+            .clock { font-size: 1.4rem; }
+            .header h1 { font-size: 1rem; }
+            .form-grid { grid-template-columns: 1fr 1fr; }
+            table { font-size: 0.8rem; }
+            .td-time { font-size: 0.9rem; }
+        }
+
+        /* ===== Keyboard Shortcut Hints ===== */
+        .kbd {
+            display: inline-block;
+            padding: 1px 5px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--bg-tertiary);
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            font-family: monospace;
+            vertical-align: middle;
+        }
+
+        /* ===== Delete confirmation ===== */
+        .confirm-delete {
+            background: var(--danger) !important;
+            color: #fff !important;
+            border-color: var(--danger) !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-left">
+                <h1>Voertuig Actie Planner</h1>
+                <div class="badge badge-open" id="badge-open"><span class="badge-dot"></span> <span id="count-open">0</span> open</div>
+                <div class="badge badge-warning" id="badge-warning"><span class="badge-dot"></span> <span id="count-warning">0</span> binnenkort</div>
+                <div class="badge badge-done" id="badge-done"><span class="badge-dot"></span> <span id="count-done">0</span> afgerond</div>
+            </div>
+            <div class="header-right">
+                <div class="clock" id="clock">--:--:--</div>
+            </div>
+        </header>
+
+        <!-- Settings -->
+        <div class="settings-bar">
+            <label>
+                Waarschuwingsmarge:
+                <input type="number" id="warningMinutes" min="1" max="120" value="15">
+                min
+            </label>
+            <label>
+                Standaard actietijd (laadpauze):
+                <input type="number" id="defaultOffset" min="1" max="240" value="60">
+                min vóór pauze
+            </label>
+        </div>
+
+        <!-- Input Panels -->
+        <div class="panels">
+            <!-- Manual Entry -->
+            <div class="panel">
+                <div class="panel-title">
+                    <span class="panel-title-icon">+</span>
+                    Handmatige Invoer
+                    <span class="kbd">Ctrl+N</span>
+                </div>
+                <form id="manualForm" autocomplete="off">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Type</label>
+                            <select id="formType">
+                                <option value="laadpauze">Laadpauze</option>
+                                <option value="prio">Prio</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Wagennummer</label>
+                            <input type="text" id="formWagon" placeholder="bijv. 2624" required>
+                        </div>
+                        <div class="form-group">
+                            <label id="labelDoeltijd">Pauzetijd</label>
+                            <input type="time" id="formDoeltijd" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Actietijd</label>
+                            <input type="time" id="formActietijd" placeholder="auto">
+                        </div>
+                        <div class="form-group">
+                            <label>Notitie</label>
+                            <input type="text" id="formNote" placeholder="optioneel">
+                        </div>
+                        <div class="form-group form-check">
+                            <input type="checkbox" id="formAutoCalc" checked>
+                            <label for="formAutoCalc">Auto actietijd</label>
+                        </div>
+                        <div class="form-group form-actions">
+                            <button type="submit" class="btn btn-primary">Toevoegen</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Bulk Import -->
+            <div class="panel">
+                <div class="panel-title">
+                    <span class="panel-title-icon">&#8645;</span>
+                    Bulk Import
+                    <span class="kbd">Ctrl+B</span>
+                </div>
+                <textarea class="bulk-textarea" id="bulkText" placeholder="Plak hier meerdere regels, bijv:&#10;2624 10.00 0900&#10;753 1145 1030&#10;750 12:30 11:00"></textarea>
+                <div class="bulk-hint">Formaat: wagennr doeltijd actietijd — ondersteunt HH:MM, HH.MM en HHMM notatie</div>
+                <div class="bulk-actions">
+                    <button class="btn btn-primary btn-sm" onclick="bulkImport('laadpauze')">Importeer als Laadpauze</button>
+                    <button class="btn btn-secondary btn-sm" onclick="bulkImport('prio')">Importeer als Prio</button>
+                    <button class="btn btn-danger btn-sm" onclick="clearBulk()">Wissen</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-container">
+            <div class="table-header-bar">
+                <h2>Actielijst</h2>
+                <div class="table-filters">
+                    <button class="filter-btn active" data-filter="all" onclick="setFilter('all')">Alle</button>
+                    <button class="filter-btn" data-filter="open" onclick="setFilter('open')">Openstaand</button>
+                    <button class="filter-btn" data-filter="prio" onclick="setFilter('prio')">Prio</button>
+                    <button class="filter-btn" data-filter="laadpauze" onclick="setFilter('laadpauze')">Laadpauze</button>
+                </div>
+                <div>
+                    <button class="btn btn-danger btn-sm" onclick="clearDone()">Afgeronde wissen</button>
+                    <button class="btn btn-secondary btn-sm" onclick="exportCSV()">Export CSV</button>
+                </div>
+            </div>
+            <div class="table-scroll">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:40px"></th>
+                            <th>Categorie</th>
+                            <th>Wagon</th>
+                            <th>Doeltijd</th>
+                            <th>Actietijd</th>
+                            <th>Resterend</th>
+                            <th>Notitie</th>
+                            <th>Acties</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableBody">
+                    </tbody>
+                </table>
+                <div class="empty-state" id="emptyState" style="display:none;">
+                    <div class="empty-state-icon">&#9776;</div>
+                    <p>Nog geen acties ingevoerd.<br>Gebruik het formulier of bulk import om te beginnen.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script>
+    /* ===================================================================
+       Voertuig Actie Planner — Core Application Logic
+       =================================================================== */
+
+    // ── State ──
+    const STORAGE_KEY = 'voertuig-actie-planner';
+    let tasks = [];
+    let activeFilter = 'all';
+    let deleteConfirmId = null;
+
+    // ── Init ──
+    document.addEventListener('DOMContentLoaded', () => {
+        loadFromStorage();
+        updateClock();
+        setInterval(updateClock, 1000);
+        setInterval(renderTable, 5000); // re-evaluate row states every 5s
+        renderTable();
+        setupFormListeners();
+        setupKeyboardShortcuts();
+        loadSettings();
+    });
+
+    // ── Clock ──
+    function updateClock() {
+        const now = new Date();
+        const h = String(now.getHours()).padStart(2, '0');
+        const m = String(now.getMinutes()).padStart(2, '0');
+        const s = String(now.getSeconds()).padStart(2, '0');
+        document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+    }
+
+    // ── Settings ──
+    function getWarningMinutes() {
+        return parseInt(document.getElementById('warningMinutes').value) || 15;
+    }
+
+    function getDefaultOffset() {
+        return parseInt(document.getElementById('defaultOffset').value) || 60;
+    }
+
+    function loadSettings() {
+        const saved = localStorage.getItem(STORAGE_KEY + '-settings');
+        if (saved) {
+            try {
+                const s = JSON.parse(saved);
+                if (s.warningMinutes) document.getElementById('warningMinutes').value = s.warningMinutes;
+                if (s.defaultOffset) document.getElementById('defaultOffset').value = s.defaultOffset;
+            } catch(e) { /* ignore */ }
+        }
+        document.getElementById('warningMinutes').addEventListener('change', saveSettings);
+        document.getElementById('defaultOffset').addEventListener('change', saveSettings);
+    }
+
+    function saveSettings() {
+        localStorage.setItem(STORAGE_KEY + '-settings', JSON.stringify({
+            warningMinutes: getWarningMinutes(),
+            defaultOffset: getDefaultOffset()
+        }));
+    }
+
+    // ── Storage ──
+    function saveToStorage() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
+    }
+
+    function loadFromStorage() {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            try {
+                tasks = JSON.parse(saved);
+            } catch(e) {
+                tasks = [];
+            }
+        }
+    }
+
+    // ── Time Parsing ──
+    function parseTime(str) {
+        if (!str || typeof str !== 'string') return null;
+        str = str.trim();
+
+        // HH:MM
+        let match = str.match(/^(\d{1,2}):(\d{2})$/);
+        if (match) return { hours: parseInt(match[1]), minutes: parseInt(match[2]) };
+
+        // HH.MM
+        match = str.match(/^(\d{1,2})\.(\d{2})$/);
+        if (match) return { hours: parseInt(match[1]), minutes: parseInt(match[2]) };
+
+        // HHMM (4 digits)
+        match = str.match(/^(\d{4})$/);
+        if (match) {
+            const h = parseInt(str.substring(0, 2));
+            const m = parseInt(str.substring(2, 4));
+            if (h >= 0 && h <= 23 && m >= 0 && m <= 59) return { hours: h, minutes: m };
+        }
+
+        // HMM (3 digits, e.g. 900 => 9:00)
+        match = str.match(/^(\d{3})$/);
+        if (match) {
+            const h = parseInt(str.substring(0, 1));
+            const m = parseInt(str.substring(1, 3));
+            if (h >= 0 && h <= 9 && m >= 0 && m <= 59) return { hours: h, minutes: m };
+        }
+
+        return null;
+    }
+
+    function formatTime(hours, minutes) {
+        return String(hours).padStart(2, '0') + ':' + String(minutes).padStart(2, '0');
+    }
+
+    function timeToMinutes(timeStr) {
+        const parts = timeStr.split(':');
+        return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+    }
+
+    function subtractMinutes(timeStr, mins) {
+        let total = timeToMinutes(timeStr) - mins;
+        if (total < 0) total += 24 * 60;
+        const h = Math.floor(total / 60) % 24;
+        const m = total % 60;
+        return formatTime(h, m);
+    }
+
+    function nowMinutes() {
+        const now = new Date();
+        return now.getHours() * 60 + now.getMinutes();
+    }
+
+    // ── Task CRUD ──
+    function generateId() {
+        return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    }
+
+    function addTask(type, wagon, doeltijd, actietijd, note = '') {
+        const task = {
+            id: generateId(),
+            type: type,
+            wagon: wagon.trim(),
+            doeltijd: doeltijd,
+            actietijd: actietijd,
+            note: note.trim(),
+            done: false,
+            createdAt: new Date().toISOString()
+        };
+        tasks.push(task);
+        saveToStorage();
+        renderTable();
+        return task;
+    }
+
+    function toggleDone(id) {
+        const task = tasks.find(t => t.id === id);
+        if (task) {
+            task.done = !task.done;
+            saveToStorage();
+            renderTable();
+        }
+    }
+
+    function deleteTask(id) {
+        if (deleteConfirmId === id) {
+            tasks = tasks.filter(t => t.id !== id);
+            deleteConfirmId = null;
+            saveToStorage();
+            renderTable();
+            showToast('Taak verwijderd', 'info');
+        } else {
+            deleteConfirmId = id;
+            renderTable();
+            setTimeout(() => {
+                if (deleteConfirmId === id) {
+                    deleteConfirmId = null;
+                    renderTable();
+                }
+            }, 3000);
+        }
+    }
+
+    function clearDone() {
+        const count = tasks.filter(t => t.done).length;
+        if (count === 0) {
+            showToast('Geen afgeronde taken om te wissen', 'info');
+            return;
+        }
+        tasks = tasks.filter(t => !t.done);
+        saveToStorage();
+        renderTable();
+        showToast(`${count} afgeronde taken gewist`, 'success');
+    }
+
+    // ── Filters ──
+    function setFilter(filter) {
+        activeFilter = filter;
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.filter === filter);
+        });
+        renderTable();
+    }
+
+    function getFilteredTasks() {
+        let filtered = [...tasks];
+
+        if (activeFilter === 'open') {
+            filtered = filtered.filter(t => !t.done);
+        } else if (activeFilter === 'prio') {
+            filtered = filtered.filter(t => t.type === 'prio');
+        } else if (activeFilter === 'laadpauze') {
+            filtered = filtered.filter(t => t.type === 'laadpauze');
+        }
+
+        // Sort by actietijd
+        filtered.sort((a, b) => timeToMinutes(a.actietijd) - timeToMinutes(b.actietijd));
+
+        return filtered;
+    }
+
+    // ── Row Status ──
+    function getRowStatus(task) {
+        if (task.done) return 'done';
+        const now = nowMinutes();
+        const actie = timeToMinutes(task.actietijd);
+        const warning = getWarningMinutes();
+
+        if (now >= actie) return 'overdue';
+        if (actie - now <= warning) return 'warning';
+        return 'normal';
+    }
+
+    function getRemainingText(task) {
+        if (task.done) return 'Afgerond';
+        const now = nowMinutes();
+        const actie = timeToMinutes(task.actietijd);
+        const diff = actie - now;
+
+        if (diff < 0) {
+            const absDiff = Math.abs(diff);
+            const h = Math.floor(absDiff / 60);
+            const m = absDiff % 60;
+            return h > 0 ? `-${h}u ${m}m` : `-${m}m`;
+        } else if (diff === 0) {
+            return 'NU';
+        } else {
+            const h = Math.floor(diff / 60);
+            const m = diff % 60;
+            return h > 0 ? `${h}u ${m}m` : `${m}m`;
+        }
+    }
+
+    // ── Render Table ──
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        const empty = document.getElementById('emptyState');
+        const filtered = getFilteredTasks();
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = '';
+            empty.style.display = 'block';
+        } else {
+            empty.style.display = 'none';
+            tbody.innerHTML = filtered.map(task => {
+                const status = getRowStatus(task);
+                const remaining = getRemainingText(task);
+                const rowClass =
+                    status === 'done' ? 'row-done' :
+                    status === 'overdue' ? 'row-overdue' :
+                    status === 'warning' ? 'row-warning' : '';
+                const catClass = task.type === 'prio' ? 'cat-prio' : 'cat-laadpauze';
+                const catLabel = task.type === 'prio' ? 'Prio' : 'Laadpauze';
+                const isDeleteConfirm = deleteConfirmId === task.id;
+
+                return `
+                    <tr class="${rowClass}" data-id="${task.id}">
+                        <td>
+                            <div class="checkbox-wrap">
+                                <input type="checkbox" ${task.done ? 'checked' : ''} onchange="toggleDone('${task.id}')" title="Markeer als afgehandeld">
+                            </div>
+                        </td>
+                        <td><span class="td-category ${catClass}">${catLabel}</span></td>
+                        <td class="td-wagon">${escapeHtml(task.wagon)}</td>
+                        <td class="td-time">${task.doeltijd}</td>
+                        <td class="td-time">${task.actietijd}</td>
+                        <td class="td-time" style="font-size:0.9rem; ${status === 'overdue' ? 'color:var(--danger)' : status === 'warning' ? 'color:var(--warning)' : ''}">${remaining}</td>
+                        <td class="td-note" title="${escapeHtml(task.note)}">${escapeHtml(task.note)}</td>
+                        <td>
+                            <div class="td-actions">
+                                <button class="btn btn-danger btn-sm ${isDeleteConfirm ? 'confirm-delete' : ''}" onclick="deleteTask('${task.id}')">
+                                    ${isDeleteConfirm ? 'Bevestig' : 'Verwijder'}
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        updateCounters();
+    }
+
+    function updateCounters() {
+        const now = nowMinutes();
+        const warning = getWarningMinutes();
+
+        let openCount = 0;
+        let warningCount = 0;
+        let doneCount = 0;
+
+        tasks.forEach(task => {
+            if (task.done) {
+                doneCount++;
+            } else {
+                const actie = timeToMinutes(task.actietijd);
+                if (now >= actie) {
+                    openCount++;
+                } else if (actie - now <= warning) {
+                    warningCount++;
+                } else {
+                    openCount++;
+                }
+            }
+        });
+
+        document.getElementById('count-open').textContent = openCount;
+        document.getElementById('count-warning').textContent = warningCount;
+        document.getElementById('count-done').textContent = doneCount;
+    }
+
+    // ── Manual Form ──
+    function setupFormListeners() {
+        const formType = document.getElementById('formType');
+        const labelDoeltijd = document.getElementById('labelDoeltijd');
+        const formAutoCalc = document.getElementById('formAutoCalc');
+        const formActietijd = document.getElementById('formActietijd');
+
+        formType.addEventListener('change', () => {
+            if (formType.value === 'prio') {
+                labelDoeltijd.textContent = 'Afzettijd';
+                formAutoCalc.parentElement.style.display = 'none';
+                formActietijd.required = true;
+            } else {
+                labelDoeltijd.textContent = 'Pauzetijd';
+                formAutoCalc.parentElement.style.display = '';
+                formActietijd.required = !formAutoCalc.checked;
+            }
+        });
+
+        formAutoCalc.addEventListener('change', () => {
+            formActietijd.disabled = formAutoCalc.checked && formType.value === 'laadpauze';
+        });
+
+        document.getElementById('manualForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const type = formType.value;
+            const wagon = document.getElementById('formWagon').value;
+            const doeltijd = document.getElementById('formDoeltijd').value;
+            let actietijd = formActietijd.value;
+            const note = document.getElementById('formNote').value;
+
+            if (!wagon || !doeltijd) {
+                showToast('Vul wagennummer en doeltijd in', 'error');
+                return;
+            }
+
+            if (type === 'laadpauze' && formAutoCalc.checked) {
+                actietijd = subtractMinutes(doeltijd, getDefaultOffset());
+            }
+
+            if (!actietijd) {
+                showToast('Vul een actietijd in', 'error');
+                return;
+            }
+
+            addTask(type, wagon, doeltijd, actietijd, note);
+            showToast(`Taak voor wagon ${wagon} toegevoegd`, 'success');
+
+            // Reset form but keep type
+            document.getElementById('formWagon').value = '';
+            document.getElementById('formDoeltijd').value = '';
+            formActietijd.value = '';
+            document.getElementById('formNote').value = '';
+            document.getElementById('formWagon').focus();
+        });
+    }
+
+    // ── Bulk Import ──
+    function bulkImport(type) {
+        const text = document.getElementById('bulkText').value.trim();
+        if (!text) {
+            showToast('Plak eerst gegevens in het tekstvak', 'error');
+            return;
+        }
+
+        const lines = text.split('\n').filter(l => l.trim());
+        let imported = 0;
+        let errors = 0;
+
+        lines.forEach(line => {
+            const parts = line.trim().split(/\s+/);
+            if (parts.length < 2) {
+                errors++;
+                return;
+            }
+
+            const wagon = parts[0];
+            const doeltijdParsed = parseTime(parts[1]);
+
+            if (!doeltijdParsed) {
+                errors++;
+                return;
+            }
+
+            const doeltijd = formatTime(doeltijdParsed.hours, doeltijdParsed.minutes);
+            let actietijd;
+
+            if (parts.length >= 3) {
+                const actieParsed = parseTime(parts[2]);
+                if (actieParsed) {
+                    actietijd = formatTime(actieParsed.hours, actieParsed.minutes);
+                }
+            }
+
+            if (!actietijd) {
+                if (type === 'laadpauze') {
+                    actietijd = subtractMinutes(doeltijd, getDefaultOffset());
+                } else {
+                    errors++;
+                    return;
+                }
+            }
+
+            // Remaining parts as note
+            const note = parts.length > 3 ? parts.slice(3).join(' ') : '';
+
+            addTask(type, wagon, doeltijd, actietijd, note);
+            imported++;
+        });
+
+        if (imported > 0) {
+            showToast(`${imported} taken geïmporteerd${errors > 0 ? `, ${errors} fouten` : ''}`, 'success');
+            document.getElementById('bulkText').value = '';
+        } else {
+            showToast(`Import mislukt: ${errors} regels niet herkend`, 'error');
+        }
+    }
+
+    function clearBulk() {
+        document.getElementById('bulkText').value = '';
+    }
+
+    // ── CSV Export ──
+    function exportCSV() {
+        if (tasks.length === 0) {
+            showToast('Geen taken om te exporteren', 'info');
+            return;
+        }
+
+        const header = 'Categorie,Wagennummer,Doeltijd,Actietijd,Notitie,Afgehandeld\n';
+        const rows = tasks.map(t =>
+            `${t.type},${t.wagon},${t.doeltijd},${t.actietijd},"${t.note.replace(/"/g, '""')}",${t.done ? 'Ja' : 'Nee'}`
+        ).join('\n');
+
+        const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `actie-planner-${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('CSV geëxporteerd', 'success');
+    }
+
+    // ── Keyboard Shortcuts ──
+    function setupKeyboardShortcuts() {
+        document.addEventListener('keydown', (e) => {
+            // Ctrl+N: focus wagon input
+            if (e.ctrlKey && e.key === 'n') {
+                e.preventDefault();
+                document.getElementById('formWagon').focus();
+            }
+            // Ctrl+B: focus bulk textarea
+            if (e.ctrlKey && e.key === 'b') {
+                e.preventDefault();
+                document.getElementById('bulkText').focus();
+            }
+            // Escape: clear delete confirm
+            if (e.key === 'Escape') {
+                deleteConfirmId = null;
+                renderTable();
+            }
+        });
+    }
+
+    // ── Toast Notifications ──
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toastContainer');
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        container.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+    }
+
+    // ── Utility ──
+    function escapeHtml(str) {
+        if (!str) return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+    </script>
+</body>
+</html>
