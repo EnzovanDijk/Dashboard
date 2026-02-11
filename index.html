@@ -562,7 +562,8 @@
 
         .td-wagon .copy-flash {
             position: absolute;
-            right: -4px;
+            left: 100%;
+            margin-left: 4px;
             top: 50%;
             transform: translateY(-50%);
             font-size: 0.65rem;
@@ -574,9 +575,9 @@
         }
 
         @keyframes copy-fade {
-            0% { opacity: 0; transform: translateY(-50%) translateX(0); }
-            15% { opacity: 1; }
-            100% { opacity: 0; transform: translateY(-50%) translateX(8px); }
+            0% { opacity: 0; transform: translateY(-50%); }
+            15% { opacity: 1; transform: translateY(-50%); }
+            100% { opacity: 0; transform: translateY(-50%) translateX(6px); }
         }
 
         .td-category {
@@ -773,6 +774,73 @@
             .td-time { font-size: 0.9rem; }
         }
 
+        /* ===== Map Panel ===== */
+        .map-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            margin-left: 8px;
+            margin-bottom: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            color: var(--accent);
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+
+        .map-toggle:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--accent);
+        }
+
+        .map-toggle-icon {
+            display: inline-block;
+            transition: transform 200ms ease;
+            font-size: 0.85rem;
+        }
+
+        .map-toggle.open .map-toggle-icon {
+            transform: rotate(90deg);
+        }
+
+        .map-drawer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 350ms cubic-bezier(0.4, 0, 0.2, 1), opacity 250ms ease;
+            opacity: 0;
+            margin-bottom: 0;
+        }
+
+        .map-drawer.open {
+            max-height: 600px;
+            opacity: 1;
+            margin-bottom: 16px;
+        }
+
+        .map-container {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .map-container iframe {
+            display: block;
+            width: 100%;
+            height: 500px;
+            border: none;
+        }
+
+        @media (max-width: 600px) {
+            .map-container iframe {
+                height: 350px;
+            }
+        }
+
         /* ===== Keyboard Shortcut Hints ===== */
         .kbd {
             display: inline-block;
@@ -864,11 +932,24 @@
             </div>
         </header>
 
-        <!-- Drawer Toggle -->
-        <button class="drawer-toggle" id="drawerToggle" onclick="toggleDrawer()">
-            <span class="drawer-toggle-icon">&#9660;</span>
-            Nieuwe invoer &amp; instellingen
-        </button>
+        <!-- Toggle Buttons -->
+        <div>
+            <button class="drawer-toggle" id="drawerToggle" onclick="toggleDrawer()">
+                <span class="drawer-toggle-icon">&#9660;</span>
+                Nieuwe invoer &amp; instellingen
+            </button>
+            <button class="map-toggle" id="mapToggle" onclick="toggleMap()">
+                <span class="map-toggle-icon">&#9656;</span>
+                Laadlocaties kaart
+            </button>
+        </div>
+
+        <!-- Collapsible Map -->
+        <div class="map-drawer" id="mapDrawer">
+            <div class="map-container">
+                <iframe id="mapFrame" loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade" src=""></iframe>
+            </div>
+        </div>
 
         <!-- Collapsible Drawer -->
         <div class="drawer" id="drawer">
@@ -1041,6 +1122,23 @@
 
         drawer.classList.toggle('open', shouldOpen);
         toggle.classList.toggle('open', shouldOpen);
+    }
+
+    // ── Map ──
+    const MAP_SRC = 'https://www.google.com/maps/d/embed?mid=1_VQAo_eE5hjAppjnbdGVTUh07P55kiQ&ll=52.27112583734776%2C5.04943419683487&z=11';
+    let mapLoaded = false;
+
+    function toggleMap() {
+        const drawer = document.getElementById('mapDrawer');
+        const toggle = document.getElementById('mapToggle');
+        const isOpen = drawer.classList.toggle('open');
+        toggle.classList.toggle('open', isOpen);
+
+        // Lazy-load the iframe only on first open
+        if (isOpen && !mapLoaded) {
+            document.getElementById('mapFrame').src = MAP_SRC;
+            mapLoaded = true;
+        }
     }
 
     // ── Clock ──
