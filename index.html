@@ -1192,6 +1192,57 @@
             opacity: 0.7;
         }
 
+        /* ===== Pauzetijden Chart ===== */
+        .pt-chart-wrap {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 14px 16px 10px;
+            margin-bottom: 14px;
+        }
+
+        .pt-chart-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .pt-chart-title {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .pt-chart-legend {
+            display: flex;
+            gap: 14px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .pt-legend-swatch {
+            display: inline-block;
+            width: 12px;
+            height: 10px;
+            border-radius: 2px;
+            vertical-align: middle;
+            margin-right: 4px;
+        }
+
+        .pt-chart-empty {
+            text-align: center;
+            padding: 24px 0;
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }
+
         .pt-breaks-info {
             max-width: 140px;
             overflow: hidden;
@@ -1415,6 +1466,20 @@
                 <div class="bulk-actions">
                     <button class="btn btn-primary btn-sm" onclick="ptImportFromPaste()">Importeer</button>
                     <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ptPasteText').value=''">Leegmaken</button>
+                </div>
+            </div>
+
+            <!-- Chart Panel -->
+            <div class="pt-chart-wrap" id="ptChartWrap">
+                <div class="pt-chart-header">
+                    <span class="pt-chart-title">Pauzes per tijdvak (30&nbsp;min)</span>
+                    <div class="pt-chart-legend">
+                        <span><span class="pt-legend-swatch" style="background:#94a3b8"></span> Bestaand rooster</span>
+                        <span id="ptLegendNew"><span class="pt-legend-swatch" style="background:#3b82f6"></span> Nieuw toe te kennen (ideaal)</span>
+                    </div>
+                </div>
+                <div id="ptChartContent">
+                    <div class="pt-chart-empty">Laad data om de grafiek te zien.</div>
                 </div>
             </div>
 
@@ -2752,7 +2817,6 @@
                 <th>45 min</th>
                 <th>Ideale pauzetijd</th>
                 ${showSuggested ? '<th title="Na verdeling over het bestaande rooster">Voorgestelde tijd</th>' : ''}
-                <th></th>
             </tr>`;
         }
 
@@ -2775,7 +2839,6 @@
 
             // Suggested time cell
             let suggestedCell = '';
-            let actionTime = idealStr; // default: use ideal for the "+ Actielijst" button
             if (showSuggested) {
                 const sugMins = suggestions ? suggestions.get(dataIdx) : null;
                 if (sugMins !== null && sugMins !== undefined && row.needsAction) {
@@ -2785,7 +2848,6 @@
                         title="${moved ? 'Verplaatst: slot rond ideale tijd was al bezet' : 'Zelfde als ideale tijd — slot is vrij'}">
                         ${sugStr}${moved ? ' <span class="pt-verspreid-icon">&#8597;</span>' : ''}
                     </td>`;
-                    actionTime = sugStr; // use suggested time for the button
                 } else {
                     suggestedCell = '<td></td>';
                 }
@@ -2804,27 +2866,122 @@
                     <td style="text-align:center">${row.recht45 ? '<span class="pt-ja">JA</span>' : ''}</td>
                     <td class="pt-ideaal">${idealStr}</td>
                     ${suggestedCell}
-                    <td>
-                        ${row.needsAction && actionTime ? `<button class="btn btn-primary btn-sm" onclick="ptNaarActielijst(${vehicleDisplay}, '${actionTime}')" title="Voeg toe aan actielijst">+ Actielijst</button>` : ''}
-                    </td>
                 </tr>
             `;
         }).join('');
+
+        ptRenderChart();
     }
 
-    // ── Naar Actielijst ──
-    function ptNaarActielijst(vehicle, doeltijd) {
-        if (!vehicle || !doeltijd) return;
-        switchTab('actielijst');
-        toggleDrawer(true);
-        setTimeout(() => {
-            document.getElementById('formType').value = 'laadpauze';
-            document.getElementById('formWagon').value = String(vehicle);
-            document.getElementById('formDoeltijd').value = doeltijd;
-            document.getElementById('formType').dispatchEvent(new Event('change'));
-            document.getElementById('formWagon').focus();
-            showToast(`Wagen ${vehicle} klaar voor invoer — controleer actietijd`, 'info');
-        }, 60);
+    // ── Render Chart ──
+    function ptRenderChart() {
+        const container = document.getElementById('ptChartContent');
+        const legendNew = document.getElementById('ptLegendNew');
+        if (!container) return;
+
+        const showSuggested = ptSpreadingEnabled && ptScheduleData.size > 0;
+        const newColor = showSuggested ? '#f97316' : '#3b82f6';
+        const newLabel = showSuggested ? 'Nieuw toe te kennen (geadviseerd)' : 'Nieuw toe te kennen (ideaal)';
+
+        if (legendNew) {
+            legendNew.innerHTML = `<span class="pt-legend-swatch" style="background:${newColor}"></span> ${newLabel}`;
+        }
+
+        // Count new breaks per slot
+        const newBreaks = new Map();
+        const suggestions = showSuggested ? ptGetSuggestedTimes() : null;
+
+        ptData.forEach((row, idx) => {
+            if (!row.needsAction || row.idealePauzetijdMins === null) return;
+            let breakMins;
+            if (showSuggested && suggestions && suggestions.has(idx)) {
+                breakMins = suggestions.get(idx);
+            } else {
+                breakMins = row.idealePauzetijdMins;
+            }
+            const slotMins = Math.floor(breakMins / 30) * 30;
+            newBreaks.set(slotMins, (newBreaks.get(slotMins) ?? 0) + 1);
+        });
+
+        const allSlots = new Set([...ptScheduleData.keys(), ...newBreaks.keys()]);
+
+        if (allSlots.size === 0) {
+            container.innerHTML = '<div class="pt-chart-empty">Laad data om de grafiek te zien.</div>';
+            return;
+        }
+
+        const sortedSlots = Array.from(allSlots).sort((a, b) => a - b);
+        const minSlot = sortedSlots[0];
+        const maxSlot = sortedSlots[sortedSlots.length - 1];
+
+        // All slots from min to max (fill gaps)
+        const slots = [];
+        for (let m = minSlot; m <= maxSlot; m += 30) slots.push(m);
+
+        // Max stacked value for y-axis
+        let maxVal = 1;
+        slots.forEach(s => {
+            const total = (ptScheduleData.get(s) ?? 0) + (newBreaks.get(s) ?? 0);
+            if (total > maxVal) maxVal = total;
+        });
+
+        // Layout
+        const barW   = Math.max(14, Math.min(32, Math.floor(680 / slots.length)));
+        const gap    = Math.max(2, Math.floor(barW * 0.25));
+        const chartW = slots.length * (barW + gap);
+        const chartH = 120;
+        const padL   = 28;
+        const padB   = 22;
+        const padT   = 6;
+        const totalW = chartW + padL + 4;
+        const totalH = chartH + padB + padT;
+        const yScale = chartH / maxVal;
+
+        // Y-axis gridlines + labels
+        const tickStep = maxVal <= 5 ? 1 : maxVal <= 10 ? 2 : maxVal <= 20 ? 5 : 10;
+        let yTicks = '';
+        for (let v = 0; v <= maxVal; v += tickStep) {
+            const y = padT + chartH - v * yScale;
+            yTicks += `<line x1="${padL - 3}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`;
+            yTicks += `<text x="${padL - 5}" y="${y + 3.5}" text-anchor="end" font-size="9" fill="var(--text-muted)">${v}</text>`;
+        }
+
+        // Bars + x-labels
+        let bars = '';
+        let xLabels = '';
+        slots.forEach((s, i) => {
+            const x = padL + i * (barW + gap);
+            const existCount = ptScheduleData.get(s) ?? 0;
+            const newCount   = newBreaks.get(s) ?? 0;
+
+            if (existCount > 0) {
+                const bh = existCount * yScale;
+                const by = padT + chartH - bh;
+                bars += `<rect x="${x}" y="${by}" width="${barW}" height="${bh}" fill="#94a3b8" rx="1"><title>${ptMinsToHHMM(s)}: ${existCount} bestaand</title></rect>`;
+            }
+            if (newCount > 0) {
+                const existH = existCount * yScale;
+                const nh = newCount * yScale;
+                const ny = padT + chartH - existH - nh;
+                bars += `<rect x="${x}" y="${ny}" width="${barW}" height="${nh}" fill="${newColor}" rx="1"><title>${ptMinsToHHMM(s)}: ${newCount} nieuw</title></rect>`;
+            }
+
+            // X-label on the hour
+            if (s % 60 === 0) {
+                const lx = x + barW / 2;
+                xLabels += `<text x="${lx}" y="${padT + chartH + 14}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${ptMinsToHHMM(s)}</text>`;
+            }
+        });
+
+        container.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 ${totalW} ${totalH}" style="overflow:visible;display:block">
+                ${yTicks}
+                <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + chartH}" stroke="var(--border)" stroke-width="1"/>
+                <line x1="${padL}" y1="${padT + chartH}" x2="${padL + chartW}" y2="${padT + chartH}" stroke="var(--border)" stroke-width="1"/>
+                ${bars}
+                ${xLabels}
+            </svg>
+        `;
     }
 
     // ── Load pauzetijden on init if already saved ──
