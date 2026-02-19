@@ -1139,7 +1139,49 @@
             margin-bottom: 14px;
         }
 
-        .pt-badge-action {
+        /* Panel buttons: loaded-state green dot + active (open) highlight */
+        .pt-panel-btn {
+            position: relative;
+        }
+        .pt-panel-btn.pt-btn-loaded::after {
+            content: '';
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #22c55e;
+        }
+        .pt-panel-btn.pt-btn-active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        /* Meewegen toggle row inside paste panels */
+        .pt-meewegen-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+        .pt-meewegen-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            white-space: nowrap;
+            padding: 3px 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+        }
+        .pt-meewegen-label input { width: 13px; height: 13px; cursor: pointer; accent-color: var(--accent); }
+
+
             display: inline-flex;
             align-items: center;
             gap: 6px;
@@ -1448,11 +1490,9 @@
             <!-- Import Bar -->
             <div class="pt-import-bar">
                 <div class="pt-import-left">
-                    <label class="btn btn-secondary btn-file-label" for="ptFileInput">
-                        &#128193; CSV laden
-                        <input type="file" id="ptFileInput" accept=".csv,.txt" style="display:none" onchange="ptHandleFileInput(event)">
-                    </label>
-                    <button class="btn btn-secondary" onclick="ptTogglePaste()">&#128203; Plakken</button>
+                    <button class="btn btn-secondary pt-panel-btn" id="ptBtnPasdata"    onclick="ptTogglePanel('pasdata')">&#128203; Pas data</button>
+                    <button class="btn btn-secondary pt-panel-btn" id="ptBtnPauzes"     onclick="ptTogglePanel('pauzes')">&#128203; Huidige pauzes</button>
+                    <button class="btn btn-secondary pt-panel-btn" id="ptBtnDagverloop" onclick="ptTogglePanel('dagverloop')">&#128203; Dagverloop</button>
                     <button class="btn btn-danger btn-sm" onclick="ptClear()">Wissen</button>
                 </div>
                 <div id="ptActionBadge" class="pt-badge-action pt-badge-zero">
@@ -1460,13 +1500,41 @@
                 </div>
             </div>
 
-            <!-- Paste Panel -->
-            <div id="ptPasteArea" class="pt-paste-area" style="display:none">
-                <textarea class="bulk-textarea" id="ptPasteText" style="min-height:130px" placeholder="Plak hier CSV-data of de platte tekst uit het roosterscherm.&#10;&#10;Het formaat wordt automatisch herkend:&#10;  • Roosterscherm (Schedule Editor):  Run  Voertuig  Uit  In  BreaksInfo&#10;  • CSV-export:  Type,Run,Vehicle,Out,In,Breaks Info"></textarea>
+            <!-- Panel: Pas data (run schedule) -->
+            <div id="ptPanel-pasdata" class="pt-paste-area" style="display:none">
+                <textarea class="bulk-textarea" id="ptPasteText" style="min-height:130px" placeholder="Plak hier de platte tekst uit het roosterscherm of CSV-export.&#10;&#10;  • Roosterscherm (Schedule Editor):  Run  Voertuig  Uit  In  BreaksInfo&#10;  • CSV-export:  Type,Run,Vehicle,Out,In,Breaks Info"></textarea>
                 <div class="bulk-actions">
                     <button class="btn btn-primary btn-sm" onclick="ptImportFromPaste()">Importeer</button>
                     <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ptPasteText').value=''">Leegmaken</button>
                 </div>
+            </div>
+
+            <!-- Panel: Huidige pauzes (existing breaks per slot) -->
+            <div id="ptPanel-pauzes" class="pt-paste-area" style="display:none">
+                <div class="pt-meewegen-row">
+                    <p class="bulk-hint" style="margin:0">Plak het bestaande rooster: één regel per tijdvak, bijv. <code>12:00&nbsp;&nbsp;13</code>. Tabs of spaties; ook direct uit Excel plakken.</p>
+                    <label class="pt-meewegen-label"><input type="checkbox" id="ptPauzesEnabledCheck" checked onchange="ptTogglePauzesEnabled()"> Meewegen</label>
+                </div>
+                <textarea class="bulk-textarea" id="ptScheduleText" style="min-height:100px" placeholder="08:00  0&#10;08:30  0&#10;09:00  0&#10;09:30  1&#10;10:00  0&#10;..."></textarea>
+                <div class="bulk-actions" style="margin-top:8px">
+                    <button class="btn btn-primary btn-sm" onclick="ptLoadSchedule()">Laden</button>
+                    <button class="btn btn-secondary btn-sm" onclick="ptClearSchedule()">Wissen</button>
+                </div>
+                <div id="ptScheduleStatus" style="margin-top:6px;font-size:0.78rem;color:var(--text-muted)"></div>
+            </div>
+
+            <!-- Panel: Dagverloop (planned trips vs bookings max) -->
+            <div id="ptPanel-dagverloop" class="pt-paste-area" style="display:none">
+                <div class="pt-meewegen-row">
+                    <p class="bulk-hint" style="margin:0">Plak de tabel: <code>tijdstip&nbsp;&nbsp;geplande_ritten&nbsp;&nbsp;bookings_maximum</code> per rij. Tabs of spaties; ook direct uit Excel. Tijdvakken met veel marge worden bevoordeeld.</p>
+                    <label class="pt-meewegen-label"><input type="checkbox" id="ptCapacityEnabledCheck" checked onchange="ptToggleCapacityEnabled()"> Meewegen</label>
+                </div>
+                <textarea class="bulk-textarea" id="ptCapacityText" style="min-height:100px" placeholder="06:00  12  14&#10;06:30  12  15&#10;07:00  22  24&#10;...&#10;&#10;Of kopieer direct uit Excel (kolommen: Tijd, Geplande ritten, Bookings Maximum)"></textarea>
+                <div class="bulk-actions" style="margin-top:8px">
+                    <button class="btn btn-primary btn-sm" onclick="ptLoadCapacity()">Laden</button>
+                    <button class="btn btn-secondary btn-sm" onclick="ptClearCapacity()">Wissen</button>
+                </div>
+                <div id="ptCapacityStatus" style="margin-top:6px;font-size:0.78rem;color:var(--text-muted)"></div>
             </div>
 
             <!-- Chart Panel -->
@@ -1474,9 +1542,9 @@
                 <div class="pt-chart-header">
                     <span class="pt-chart-title">Pauzes per tijdvak (30&nbsp;min)</span>
                     <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
-                        <div class="pt-chart-legend">
-                            <span><span class="pt-legend-swatch" style="background:#94a3b8"></span> Bestaand rooster</span>
-                            <span id="ptLegendNew"><span class="pt-legend-swatch" style="background:#3b82f6"></span> Nieuw toe te kennen (ideaal)</span>
+                        <div class="pt-chart-legend" id="ptChartLegend">
+                            <span><span class="pt-legend-swatch" style="background:#94a3b8"></span> Bestaand</span>
+                            <span id="ptLegendNew"><span class="pt-legend-swatch" style="background:#3b82f6"></span> Nieuw (ideaal)</span>
                         </div>
                         <label style="display:inline-flex;align-items:center;gap:5px;font-size:0.78rem;color:var(--text-secondary);cursor:pointer;white-space:nowrap;border-left:1px solid var(--border);padding-left:14px">
                             <input type="checkbox" id="ptSpreadToggle" onchange="ptToggleSpreading()" style="width:14px;height:14px;cursor:pointer;accent-color:var(--accent)">
@@ -1486,40 +1554,6 @@
                 </div>
                 <div id="ptChartContent">
                     <div class="pt-chart-empty">Laad data om de grafiek te zien.</div>
-                </div>
-            </div>
-
-            <!-- Verdeling / Plan Section -->
-            <button class="drawer-toggle" id="ptPlanToggle" onclick="ptTogglePlan()" style="margin-bottom:12px;display:inline-flex">
-                <span class="drawer-toggle-icon">&#9660;</span>
-                Verdeling bestaand rooster
-            </button>
-            <div class="drawer" id="ptPlanDrawer">
-                <div class="drawer-inner" style="padding-top:0">
-                    <p class="bulk-hint" style="margin-bottom:8px">Plak het bestaande rooster: één regel per tijdvak met "tijdstip&nbsp;&nbsp;aantal", bijv. <code>12:00&nbsp;&nbsp;13</code>. Je kunt ook direct uit Excel of een tabel plakken (tabs worden herkend).</p>
-                    <textarea class="bulk-textarea" id="ptScheduleText" style="min-height:110px" placeholder="08:00  0&#10;08:30  0&#10;09:00  0&#10;09:30  1&#10;10:00  0&#10;10:30  7&#10;11:00  5&#10;..."></textarea>
-                    <div class="bulk-actions" style="margin-top:8px;align-items:center;flex-wrap:wrap">
-                        <button class="btn btn-primary btn-sm" onclick="ptLoadSchedule()">Rooster laden</button>
-                        <button class="btn btn-secondary btn-sm" onclick="ptClearSchedule()">Rooster wissen</button>
-                    </div>
-                    <div id="ptScheduleStatus" style="margin-top:8px;font-size:0.78rem;color:var(--text-muted)"></div>
-                </div>
-            </div>
-
-            <!-- Ritverdeling / Capacity Section -->
-            <button class="drawer-toggle" id="ptCapacityToggle" onclick="ptToggleCapacityPlan()" style="margin-bottom:12px;display:inline-flex">
-                <span class="drawer-toggle-icon">&#9660;</span>
-                Ritverdeling &amp; capaciteit
-            </button>
-            <div class="drawer" id="ptCapacityDrawer">
-                <div class="drawer-inner" style="padding-top:0">
-                    <p class="bulk-hint" style="margin-bottom:8px">Plak de tabel met geplande ritten en bookings maximum. Elke rij: <code>tijdstip&nbsp;&nbsp;geplande_ritten&nbsp;&nbsp;bookings_maximum</code> (tabs of spaties). Tijdvakken met veel marge worden automatisch bevoordeeld in de verdeling.</p>
-                    <textarea class="bulk-textarea" id="ptCapacityText" style="min-height:110px" placeholder="06:00  12  14&#10;06:30  12  15&#10;07:00  22  24&#10;...&#10;&#10;Of kopieer direct uit Excel (kolommen: Tijd, Geplande ritten, Bookings Maximum)"></textarea>
-                    <div class="bulk-actions" style="margin-top:8px">
-                        <button class="btn btn-primary btn-sm" onclick="ptLoadCapacity()">Laden</button>
-                        <button class="btn btn-secondary btn-sm" onclick="ptClearCapacity()">Wissen</button>
-                    </div>
-                    <div id="ptCapacityStatus" style="margin-top:8px;font-size:0.78rem;color:var(--text-muted)"></div>
                 </div>
             </div>
 
@@ -2580,13 +2614,6 @@
         event.target.value = '';
     }
 
-    function ptTogglePaste() {
-        const area = document.getElementById('ptPasteArea');
-        const visible = area.style.display !== 'none';
-        area.style.display = visible ? 'none' : '';
-        if (!visible) document.getElementById('ptPasteText').focus();
-    }
-
     function ptImportFromPaste() {
         const text = document.getElementById('ptPasteText').value;
         if (!text.trim()) {
@@ -2613,29 +2640,53 @@
     }
 
     // ── Plan / Verdeling ──
-    let ptScheduleData  = new Map(); // slotMins (multiples of 30) -> existing break count
-    let ptCapacityData  = new Map(); // slotMins -> { gepland, maximum, marge }
+    let ptScheduleData     = new Map(); // slotMins (multiples of 30) -> existing break count
+    let ptCapacityData     = new Map(); // slotMins -> { gepland, maximum, marge }
     let ptSpreadingEnabled = false;
+    let ptPauzesEnabled    = true;  // whether existing break schedule weighs in spreading
+    let ptCapacityEnabled  = true;  // whether dagverloop capacity weighs in spreading
+    let ptActivePanel      = null;  // 'pasdata' | 'pauzes' | 'dagverloop' | null
 
-    // How many "virtual break slots" each unit of spare trip-capacity is worth.
-    // marge / CAPACITY_WEIGHT = virtual credit subtracted from raw break count.
-    // E.g. marge=25, CAPACITY_WEIGHT=5 → slot acts as if it has 5 fewer breaks.
-    const CAPACITY_WEIGHT = 5;
+    const CAPACITY_WEIGHT  = 5; // marge / CAPACITY_WEIGHT = virtual break credit
 
-    // Effective count used for slot comparison in the spreading algorithm.
-    // Slots with high spare capacity appear "less full" so they are preferred.
+    // Effective count: slots with high spare capacity appear "less full"
     function ptEffectiveCount(rawCount, slotMins) {
-        if (ptCapacityData.size === 0) return rawCount;
+        if (!ptCapacityEnabled || ptCapacityData.size === 0) return rawCount;
         const cap = ptCapacityData.get(slotMins);
         if (!cap || cap.marge <= 0) return rawCount;
         return rawCount - Math.floor(cap.marge / CAPACITY_WEIGHT);
     }
 
-    function ptTogglePlan() {
-        const drawer = document.getElementById('ptPlanDrawer');
-        const toggle = document.getElementById('ptPlanToggle');
-        const isOpen = drawer.classList.toggle('open');
-        toggle.classList.toggle('open', isOpen);
+    // Accordion panel toggle — one panel open at a time; updates button states
+    function ptTogglePanel(name) {
+        const panels = ['pasdata', 'pauzes', 'dagverloop'];
+        const opening = ptActivePanel !== name;
+        ptActivePanel = opening ? name : null;
+        panels.forEach(p => {
+            const el  = document.getElementById('ptPanel-' + p);
+            const btn = document.getElementById('ptBtn' + p.charAt(0).toUpperCase() + p.slice(1));
+            if (el)  el.style.display  = (p === name && opening) ? '' : 'none';
+            if (btn) btn.classList.toggle('pt-btn-active', p === name && opening);
+        });
+    }
+
+    // Set/clear the green "data loaded" dot on a panel button
+    function ptSetBtnLoaded(name, loaded) {
+        const id  = 'ptBtn' + name.charAt(0).toUpperCase() + name.slice(1);
+        const btn = document.getElementById(id);
+        if (btn) btn.classList.toggle('pt-btn-loaded', loaded);
+    }
+
+    function ptTogglePauzesEnabled() {
+        ptPauzesEnabled = document.getElementById('ptPauzesEnabledCheck').checked;
+        ptSavePlanToStorage();
+        ptRender();
+    }
+
+    function ptToggleCapacityEnabled() {
+        ptCapacityEnabled = document.getElementById('ptCapacityEnabledCheck').checked;
+        ptSavePlanToStorage();
+        ptRender();
     }
 
     function ptParseScheduleLine(line) {
@@ -2673,16 +2724,15 @@
         ptSavePlanToStorage();
         document.getElementById('ptScheduleStatus').textContent =
             `${parsed} tijdvakken geladen${skipped ? ` (${skipped} regels overgeslagen)` : ''}`;
+        ptSetBtnLoaded('pauzes', true);
         ptRender();
         showToast(`Rooster geladen: ${parsed} tijdvakken`, 'success');
     }
 
     function ptClearSchedule() {
         ptScheduleData = new Map();
-        ptSpreadingEnabled = false;
-        const toggle = document.getElementById('ptSpreadToggle');
-        if (toggle) toggle.checked = false;
         document.getElementById('ptScheduleStatus').textContent = '';
+        ptSetBtnLoaded('pauzes', false);
         ptSavePlanToStorage();
         ptRender();
         showToast('Rooster gewist', 'info');
@@ -2690,8 +2740,10 @@
 
     function ptToggleSpreading() {
         ptSpreadingEnabled = document.getElementById('ptSpreadToggle').checked;
-        if (ptSpreadingEnabled && ptScheduleData.size === 0) {
-            showToast('Laad eerst een rooster via "Verdeling bestaand rooster"', 'error');
+        const hasData = (ptPauzesEnabled && ptScheduleData.size > 0) ||
+                        (ptCapacityEnabled && ptCapacityData.size > 0);
+        if (ptSpreadingEnabled && !hasData) {
+            showToast('Laad eerst huidige pauzes of dagverloop om te kunnen verdelen.', 'error');
             ptSpreadingEnabled = false;
             document.getElementById('ptSpreadToggle').checked = false;
             return;
@@ -2702,9 +2754,11 @@
 
     function ptSavePlanToStorage() {
         localStorage.setItem(PT_STORAGE_KEY + '-plan', JSON.stringify({
-            schedule: Array.from(ptScheduleData.entries()),
-            spreading: ptSpreadingEnabled,
-            text: document.getElementById('ptScheduleText')?.value || ''
+            schedule:         Array.from(ptScheduleData.entries()),
+            spreading:        ptSpreadingEnabled,
+            pauzesEnabled:    ptPauzesEnabled,
+            capacityEnabled:  ptCapacityEnabled,
+            text:             document.getElementById('ptScheduleText')?.value || ''
         }));
     }
 
@@ -2715,8 +2769,14 @@
             const obj = JSON.parse(saved);
             if (Array.isArray(obj.schedule)) ptScheduleData = new Map(obj.schedule);
             ptSpreadingEnabled = !!obj.spreading;
+            ptPauzesEnabled    = obj.pauzesEnabled    !== false; // default true
+            ptCapacityEnabled  = obj.capacityEnabled  !== false; // default true
             const toggle = document.getElementById('ptSpreadToggle');
             if (toggle) toggle.checked = ptSpreadingEnabled;
+            const pCheck = document.getElementById('ptPauzesEnabledCheck');
+            if (pCheck) pCheck.checked = ptPauzesEnabled;
+            const cCheck = document.getElementById('ptCapacityEnabledCheck');
+            if (cCheck) cCheck.checked = ptCapacityEnabled;
             if (obj.text) {
                 const ta = document.getElementById('ptScheduleText');
                 if (ta) ta.value = obj.text;
@@ -2724,19 +2784,12 @@
             if (ptScheduleData.size > 0) {
                 const status = document.getElementById('ptScheduleStatus');
                 if (status) status.textContent = `${ptScheduleData.size} tijdvakken geladen`;
+                ptSetBtnLoaded('pauzes', true);
             }
         } catch(e) { /* ignore corrupt data */ }
     }
 
     // ── Capacity / Ritverdeling ──
-    function ptToggleCapacityPlan() {
-        const drawer = document.getElementById('ptCapacityDrawer');
-        const toggle = document.getElementById('ptCapacityToggle');
-        if (!drawer) return;
-        const isOpen = drawer.classList.toggle('open');
-        toggle.classList.toggle('open', isOpen);
-    }
-
     function ptParseCapacityData(text) {
         const result = new Map();
         const re = /(\d{1,2})[.:](\d{2})\s+(\d+)\s+(\d+)/;
@@ -2767,8 +2820,9 @@
         ptSaveCapacityToStorage();
         const el = document.getElementById('ptCapacityStatus');
         if (el) el.textContent = `${count} tijdvakken geladen.`;
+        ptSetBtnLoaded('dagverloop', true);
         ptRender();
-        showToast(`Ritverdeling geladen: ${count} tijdvakken`, 'success');
+        showToast(`Dagverloop geladen: ${count} tijdvakken`, 'success');
     }
 
     function ptClearCapacity() {
@@ -2777,6 +2831,7 @@
         const st = document.getElementById('ptCapacityStatus');
         if (ta) ta.value = '';
         if (st) st.textContent = '';
+        ptSetBtnLoaded('dagverloop', false);
         localStorage.removeItem('voertuig-actie-planner-pauzetijden-capacity');
         ptRender();
     }
@@ -2796,6 +2851,7 @@
             if (ptCapacityData.size > 0) {
                 const el = document.getElementById('ptCapacityStatus');
                 if (el) el.textContent = `${ptCapacityData.size} tijdvakken geladen (uit opslag).`;
+                ptSetBtnLoaded('dagverloop', true);
             }
         } catch(e) { /* ignore corrupt data */ }
     }
@@ -2835,7 +2891,10 @@
     //   an early-starting driver claims the ideal slot first and the late-starting
     //   driver with the same ideal time gets pushed to a later slot.
     function ptGetSuggestedTimes() {
-        if (!ptSpreadingEnabled || ptScheduleData.size === 0) return null;
+        if (!ptSpreadingEnabled) return null;
+        const useSchedule = ptPauzesEnabled && ptScheduleData.size > 0;
+        const useCapacity = ptCapacityEnabled && ptCapacityData.size > 0;
+        if (!useSchedule && !useCapacity) return null;
 
         // Collect vehicles needing action
         const vehicles = [];
@@ -2847,10 +2906,11 @@
         });
         if (vehicles.length === 0) return null;
 
-        // Working schedule: start from existing counts, ensure all 30-min slots exist
-        const working = new Map(ptScheduleData);
-        for (let m = 0; m < 1440; m += 30) {
-            if (!working.has(m)) working.set(m, 0);
+        // Working schedule: seed from existing breaks if pauzes is enabled
+        const working = new Map();
+        for (let m = 0; m < 1440; m += 30) working.set(m, 0);
+        if (useSchedule) {
+            ptScheduleData.forEach((count, slot) => working.set(slot, count));
         }
 
         // Primary sort: ideal time ASC
@@ -2910,7 +2970,8 @@
         countEl.textContent = actionCount;
         badge.classList.toggle('pt-badge-zero', actionCount === 0);
 
-        const showSuggested = ptSpreadingEnabled && ptScheduleData.size > 0;
+        const showSuggested = ptSpreadingEnabled &&
+            ((ptPauzesEnabled && ptScheduleData.size > 0) || (ptCapacityEnabled && ptCapacityData.size > 0));
         const suggestions = showSuggested ? ptGetSuggestedTimes() : null;
         const filteredData = ptGetFiltered();
 
@@ -2990,7 +3051,8 @@
         const legendNew = document.getElementById('ptLegendNew');
         if (!container) return;
 
-        const showSuggested = ptSpreadingEnabled && ptScheduleData.size > 0;
+        const showSuggested = ptSpreadingEnabled &&
+            ((ptPauzesEnabled && ptScheduleData.size > 0) || (ptCapacityEnabled && ptCapacityData.size > 0));
         const newColor = showSuggested ? '#f97316' : '#3b82f6';
         const newLabel = showSuggested ? 'Nieuw toe te kennen (geadviseerd)' : 'Nieuw toe te kennen (ideaal)';
 
@@ -3014,27 +3076,42 @@
             newBreaks.set(slotMins, (newBreaks.get(slotMins) ?? 0) + 1);
         });
 
-        const allSlots = new Set([...ptScheduleData.keys(), ...newBreaks.keys()]);
+        // Slot range: union of breaks + capacity data
+        const hasCapBg = ptCapacityData.size > 0;
+        const allSlots = new Set([
+            ...ptScheduleData.keys(), ...newBreaks.keys(),
+            ...(hasCapBg ? ptCapacityData.keys() : [])
+        ]);
 
         if (allSlots.size === 0) {
             container.innerHTML = '<div class="pt-chart-empty">Laad data om de grafiek te zien.</div>';
             return;
         }
 
+        // Update legend: add/remove capacity rows
+        const legendEl = document.getElementById('ptChartLegend');
+        if (legendEl) {
+            const capExtra = hasCapBg
+                ? `<span><span class="pt-legend-swatch" style="background:#ef4444;opacity:0.5"></span> Bookings max</span>
+                   <span><span class="pt-legend-swatch" style="background:#3b82f6;opacity:0.5"></span> Geplande ritten</span>`
+                : '';
+            legendEl.innerHTML = `
+                <span><span class="pt-legend-swatch" style="background:#94a3b8"></span> Bestaand</span>
+                <span id="ptLegendNew"><span class="pt-legend-swatch" style="background:${newColor}"></span> Nieuw (${showSuggested ? 'geadviseerd' : 'ideaal'})</span>
+                ${capExtra}`;
+        }
+
         const sortedSlots = Array.from(allSlots).sort((a, b) => a - b);
         const minSlot = sortedSlots[0];
         const maxSlot = sortedSlots[sortedSlots.length - 1];
 
-        // All slots from min to max (fill gaps)
         const slots = [];
         for (let m = minSlot; m <= maxSlot; m += 30) slots.push(m);
 
-        // Fixed y-axis: based on existing schedule max (stable across ideaal/advies toggle).
-        // Rounded up to nearest 5, minimum 20. Ticks always at 0, 5, 10, 15, 20, ...
+        // Fixed y-axis: stable across ideaal/geadviseerd toggle (based on schedule max)
         let scheduleMax = 0;
         ptScheduleData.forEach(c => { if (c > scheduleMax) scheduleMax = c; });
         let fixedMax = Math.max(20, Math.ceil(scheduleMax / 5) * 5);
-        // Safety: bump if any stacked bar would overflow
         slots.forEach(s => {
             const total = (ptScheduleData.get(s) ?? 0) + (newBreaks.get(s) ?? 0);
             if (total > fixedMax) fixedMax = Math.ceil(total / 5) * 5;
@@ -3052,54 +3129,63 @@
         const totalH = chartH + padB + padT;
         const yScale = chartH / fixedMax;
 
-        // Y-axis gridlines + labels (fixed step of 5)
-        const tickStep = 5;
+        // Y-axis gridlines (fixed step of 5)
         let yTicks = '';
-        for (let v = 0; v <= fixedMax; v += tickStep) {
+        for (let v = 0; v <= fixedMax; v += 5) {
             const y = padT + chartH - v * yScale;
             yTicks += `<line x1="${padL - 3}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`;
             yTicks += `<text x="${padL - 5}" y="${y + 3.5}" text-anchor="end" font-size="9" fill="var(--text-muted)">${v}</text>`;
         }
 
-        // Bars + x-labels
+        // Background: capacity data (geplande ritten + bookings max), normalized to chart height
+        let bgBars = '';
+        if (hasCapBg) {
+            let maxTrip = 1;
+            ptCapacityData.forEach(c => { if (c.maximum > maxTrip) maxTrip = c.maximum; });
+
+            slots.forEach((s, i) => {
+                const cap = ptCapacityData.get(s);
+                if (!cap) return;
+                const x = padL + i * (barW + gap);
+
+                // Bookings maximum — light red, full column
+                const maxH = (cap.maximum / maxTrip) * chartH;
+                bgBars += `<rect x="${x}" y="${padT + chartH - maxH}" width="${barW}" height="${maxH}" fill="#ef4444" opacity="0.10" rx="1"><title>${ptMinsToHHMM(s)} bookings max: ${cap.maximum}</title></rect>`;
+
+                // Geplande ritten — light blue, lower portion
+                const gepH = (cap.gepland / maxTrip) * chartH;
+                bgBars += `<rect x="${x}" y="${padT + chartH - gepH}" width="${barW}" height="${gepH}" fill="#3b82f6" opacity="0.14" rx="1"><title>${ptMinsToHHMM(s)} gepland: ${cap.gepland} | marge: ${cap.marge}</title></rect>`;
+            });
+        }
+
+        // Foreground bars + x-labels
         let bars = '';
         let xLabels = '';
         slots.forEach((s, i) => {
-            const x = padL + i * (barW + gap);
+            const x          = padL + i * (barW + gap);
             const existCount = ptScheduleData.get(s) ?? 0;
             const newCount   = newBreaks.get(s) ?? 0;
-
-            const cap = ptCapacityData.get(s);
-            const margeTip = cap ? ` | marge: ${cap.marge} (${cap.gepland}/${cap.maximum})` : '';
+            const cap        = ptCapacityData.get(s);
+            const margeTip   = cap ? ` | marge: ${cap.marge} (${cap.gepland}/${cap.maximum})` : '';
 
             if (existCount > 0) {
                 const bh = existCount * yScale;
-                const by = padT + chartH - bh;
-                bars += `<rect x="${x}" y="${by}" width="${barW}" height="${bh}" fill="#94a3b8" rx="1"><title>${ptMinsToHHMM(s)}: ${existCount} bestaand${margeTip}</title></rect>`;
+                bars += `<rect x="${x}" y="${padT + chartH - bh}" width="${barW}" height="${bh}" fill="#94a3b8" rx="1"><title>${ptMinsToHHMM(s)}: ${existCount} bestaand${margeTip}</title></rect>`;
             }
             if (newCount > 0) {
                 const existH = existCount * yScale;
-                const nh = newCount * yScale;
-                const ny = padT + chartH - existH - nh;
-                bars += `<rect x="${x}" y="${ny}" width="${barW}" height="${nh}" fill="${newColor}" rx="1"><title>${ptMinsToHHMM(s)}: ${newCount} nieuw${margeTip}</title></rect>`;
-            }
-            // High-capacity indicator: small teal dot at bar top when marge is notable
-            if (cap && cap.marge >= 10) {
-                const totalH  = (existCount + newCount) * yScale;
-                const dotY    = padT + chartH - totalH - 5;
-                const dotX    = x + barW / 2;
-                bars += `<circle cx="${dotX}" cy="${dotY}" r="2.5" fill="#14b8a6" opacity="0.85"><title>${ptMinsToHHMM(s)}: marge ${cap.marge}</title></circle>`;
+                const nh     = newCount * yScale;
+                bars += `<rect x="${x}" y="${padT + chartH - existH - nh}" width="${barW}" height="${nh}" fill="${newColor}" rx="1"><title>${ptMinsToHHMM(s)}: ${newCount} nieuw${margeTip}</title></rect>`;
             }
 
-            // X-label on the hour
             if (s % 60 === 0) {
-                const lx = x + barW / 2;
-                xLabels += `<text x="${lx}" y="${padT + chartH + 14}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${ptMinsToHHMM(s)}</text>`;
+                xLabels += `<text x="${x + barW / 2}" y="${padT + chartH + 14}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${ptMinsToHHMM(s)}</text>`;
             }
         });
 
         container.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 ${totalW} ${totalH}" style="overflow:visible;display:block">
+                ${bgBars}
                 ${yTicks}
                 <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + chartH}" stroke="var(--border)" stroke-width="1"/>
                 <line x1="${padL}" y1="${padT + chartH}" x2="${padL + chartW}" y2="${padT + chartH}" stroke="var(--border)" stroke-width="1"/>
