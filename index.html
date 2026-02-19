@@ -3123,39 +3123,57 @@
         const chartW = slots.length * (barW + gap);
         const chartH = 120;
         const padL   = 28;
+        const padR   = hasCapBg ? 30 : 4; // room for secondary Y-axis labels
         const padB   = 22;
         const padT   = 6;
-        const totalW = chartW + padL + 4;
+        const totalW = chartW + padL + padR;
         const totalH = chartH + padB + padT;
         const yScale = chartH / fixedMax;
 
-        // Y-axis gridlines (fixed step of 5)
+        // Left Y-axis: breaks (0, 5, 10, 15, 20 …)
+        // Right Y-axis: trips — same pixel positions, labels 0, 50, 100, 150, 200
+        // Mapping: 5 breaks ↔ 50 trips → tripScale = chartH / 200
+        const TRIP_MAX   = 200;
+        const tripScale  = chartH / TRIP_MAX;
+
         let yTicks = '';
+        let rightYTicks = '';
         for (let v = 0; v <= fixedMax; v += 5) {
             const y = padT + chartH - v * yScale;
+            // gridline + left label (breaks)
             yTicks += `<line x1="${padL - 3}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`;
             yTicks += `<text x="${padL - 5}" y="${y + 3.5}" text-anchor="end" font-size="9" fill="var(--text-muted)">${v}</text>`;
+            // right label (trips) — only when capacity data present
+            if (hasCapBg) {
+                const tv = v * 10; // 5 breaks = 50 trips
+                rightYTicks += `<text x="${padL + chartW + 4}" y="${y + 3.5}" text-anchor="start" font-size="9" fill="var(--text-muted)">${tv}</text>`;
+            }
         }
 
-        // Background: capacity data (geplande ritten + bookings max), normalized to chart height
-        let bgBars = '';
+        // Capacity lines (polylines drawn below the break bars)
+        let tripLines = '';
         if (hasCapBg) {
-            let maxTrip = 1;
-            ptCapacityData.forEach(c => { if (c.maximum > maxTrip) maxTrip = c.maximum; });
-
+            const maxPts = [];
+            const gepPts = [];
             slots.forEach((s, i) => {
                 const cap = ptCapacityData.get(s);
                 if (!cap) return;
-                const x = padL + i * (barW + gap);
-
-                // Bookings maximum — light red, full column
-                const maxH = (cap.maximum / maxTrip) * chartH;
-                bgBars += `<rect x="${x}" y="${padT + chartH - maxH}" width="${barW}" height="${maxH}" fill="#ef4444" opacity="0.10" rx="1"><title>${ptMinsToHHMM(s)} bookings max: ${cap.maximum}</title></rect>`;
-
-                // Geplande ritten — light blue, lower portion
-                const gepH = (cap.gepland / maxTrip) * chartH;
-                bgBars += `<rect x="${x}" y="${padT + chartH - gepH}" width="${barW}" height="${gepH}" fill="#3b82f6" opacity="0.14" rx="1"><title>${ptMinsToHHMM(s)} gepland: ${cap.gepland} | marge: ${cap.marge}</title></rect>`;
+                const cx = padL + i * (barW + gap) + barW / 2;
+                maxPts.push(`${cx},${padT + chartH - Math.min(cap.maximum, TRIP_MAX) * tripScale}`);
+                gepPts.push(`${cx},${padT + chartH - Math.min(cap.gepland, TRIP_MAX) * tripScale}`);
             });
+
+            if (maxPts.length >= 2) {
+                // Subtle fill below bookings max
+                const pts0 = maxPts[0].split(',')[0], pts1 = maxPts[maxPts.length - 1].split(',')[0];
+                tripLines += `<polygon points="${pts0},${padT + chartH} ${maxPts.join(' ')} ${pts1},${padT + chartH}" fill="#ef4444" opacity="0.06"/>`;
+                tripLines += `<polyline points="${maxPts.join(' ')}" fill="none" stroke="#ef4444" stroke-width="1.5" stroke-linejoin="round" opacity="0.6"><title>Bookings maximum</title></polyline>`;
+            }
+            if (gepPts.length >= 2) {
+                const pts0 = gepPts[0].split(',')[0], pts1 = gepPts[gepPts.length - 1].split(',')[0];
+                tripLines += `<polygon points="${pts0},${padT + chartH} ${gepPts.join(' ')} ${pts1},${padT + chartH}" fill="#3b82f6" opacity="0.08"/>`;
+                tripLines += `<polyline points="${gepPts.join(' ')}" fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linejoin="round" opacity="0.6"><title>Geplande ritten</title></polyline>`;
+            }
         }
 
         // Foreground bars + x-labels
@@ -3185,12 +3203,13 @@
 
         container.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="100%" viewBox="0 0 ${totalW} ${totalH}" style="overflow:visible;display:block">
-                ${bgBars}
+                ${tripLines}
                 ${yTicks}
                 <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${padT + chartH}" stroke="var(--border)" stroke-width="1"/>
                 <line x1="${padL}" y1="${padT + chartH}" x2="${padL + chartW}" y2="${padT + chartH}" stroke="var(--border)" stroke-width="1"/>
                 ${bars}
                 ${xLabels}
+                ${rightYTicks}
             </svg>
         `;
     }
