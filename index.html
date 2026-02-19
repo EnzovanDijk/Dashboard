@@ -1201,6 +1201,45 @@
         .td-wagon-pt { cursor: pointer; }
         .td-wagon-pt:hover { color: var(--accent); background: rgba(59,130,246,0.07); }
 
+        /* Actie column badges */
+        .pt-badge-inplannen {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            background: rgba(59,130,246,0.12);
+            color: #3b82f6;
+            white-space: nowrap;
+        }
+        .pt-badge-verschuiven {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            background: rgba(245,158,11,0.12);
+            color: #d97706;
+            white-space: nowrap;
+        }
+
+        /* Shift controls */
+        .pt-shift-cell { white-space: nowrap; vertical-align: middle; }
+        .pt-shift-ctrl { display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; }
+        .pt-shift-btn {
+            background: none;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.68rem;
+            padding: 1px 5px;
+            line-height: 1.6;
+        }
+        .pt-shift-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .pt-shift-time { font-size: 0.78rem; font-weight: 600; color: var(--text-primary); min-width: 36px; text-align: center; }
+        .pt-shift-delta { font-size: 0.68rem; color: var(--accent); }
+
 
             display: inline-flex;
             align-items: center;
@@ -1586,7 +1625,8 @@
                 <div class="table-header-bar">
                     <h2>Pauzetijden</h2>
                     <div class="table-filters">
-                        <button class="filter-btn pt-filter-btn active" data-filter="actie" onclick="ptSetFilter('actie')">Actie nodig</button>
+                        <button class="filter-btn pt-filter-btn active" data-filter="actie" onclick="ptSetFilter('actie')">Inplannen</button>
+                        <button class="filter-btn pt-filter-btn" data-filter="verschuiven" onclick="ptSetFilter('verschuiven')">Verschuiven</button>
                         <button class="filter-btn pt-filter-btn" data-filter="all" onclick="ptSetFilter('all')">Alle runs</button>
                     </div>
                 </div>
@@ -2377,6 +2417,7 @@
 
     function ptClear() {
         ptData = [];
+        ptBreakShifts.clear();
         ptSaveToStorage();
         ptRender();
         showToast('Pauzetijden data gewist', 'info');
@@ -2659,17 +2700,65 @@
     }
 
     function ptGetFiltered() {
-        if (ptFilter === 'actie') return ptData.filter(r => r.needsAction);
+        if (ptFilter === 'actie')       return ptData.filter(r => r.needsAction);
+        if (ptFilter === 'verschuiven') return ptData.filter(r => ptParseBreakTimeFromInfo(r.BreaksInfo) !== null);
         return ptData;
     }
 
     // ── Plan / Verdeling ──
     let ptScheduleData     = new Map(); // slotMins (multiples of 30) -> existing break count
     let ptCapacityData     = new Map(); // slotMins -> { gepland, maximum, marge }
+    let ptBreakShifts      = new Map(); // dataIdx -> delta in minutes (multiples of 30)
     let ptSpreadingEnabled = false;
     let ptPauzesEnabled    = true;  // whether existing break schedule weighs in spreading
     let ptCapacityEnabled  = true;  // whether dagverloop capacity weighs in spreading
     let ptActivePanel      = null;  // 'pasdata' | 'pauzes' | 'dagverloop' | null
+
+    // Parse first HH:MM found in a BreaksInfo string (e.g. "13:25[30m]" → 805)
+    function ptParseBreakTimeFromInfo(info) {
+        if (!info) return null;
+        const m = String(info).match(/\b(\d{1,2}):(\d{2})\b/);
+        if (!m) return null;
+        const h = parseInt(m[1], 10), min = parseInt(m[2], 10);
+        if (h > 23 || min > 59) return null;
+        return h * 60 + min;
+    }
+
+    // Effective schedule: ptScheduleData with ptBreakShifts applied on top
+    function ptGetEffectiveSchedule() {
+        const eff = new Map(ptScheduleData);
+        ptBreakShifts.forEach((delta, idx) => {
+            if (delta === 0) return;
+            const row = ptData[idx];
+            if (!row) return;
+            const origMins = ptParseBreakTimeFromInfo(row.BreaksInfo);
+            if (origMins === null) return;
+            const origSlot = Math.floor(origMins / 30) * 30;
+            const newSlot  = ((origSlot + delta) % 1440 + 1440) % 1440;
+            if (origSlot !== newSlot) {
+                eff.set(origSlot, Math.max(0, (eff.get(origSlot) ?? 0) - 1));
+                eff.set(newSlot, (eff.get(newSlot) ?? 0) + 1);
+            }
+        });
+        return eff;
+    }
+
+    // Shift an existing break by ±30 min and re-render
+    function ptShiftBreak(dataIdx, delta) {
+        const current = ptBreakShifts.get(dataIdx) ?? 0;
+        const next = current + delta;
+        if (next === 0) ptBreakShifts.delete(dataIdx);
+        else            ptBreakShifts.set(dataIdx, next);
+        ptRender();
+        ptRenderChart();
+    }
+
+    // Reset a shifted break back to 0
+    function ptResetShift(dataIdx) {
+        ptBreakShifts.delete(dataIdx);
+        ptRender();
+        ptRenderChart();
+    }
 
     const CAPACITY_WEIGHT  = 5; // marge / CAPACITY_WEIGHT = virtual break credit
 
@@ -2938,11 +3027,12 @@
         });
         if (vehicles.length === 0) return null;
 
-        // Working schedule: seed from existing breaks if pauzes is enabled
+        // Working schedule: seed from effective schedule (includes manual shift overrides)
+        const effectiveSched = ptGetEffectiveSchedule();
         const working = new Map();
         for (let m = 0; m < 1440; m += 30) working.set(m, 0);
         if (useSchedule) {
-            ptScheduleData.forEach((count, slot) => working.set(slot, count));
+            effectiveSched.forEach((count, slot) => working.set(slot, count));
         }
 
         // Primary sort: ideal time ASC
@@ -3021,6 +3111,7 @@
                 <th>45 min</th>
                 <th>Ideale pauzetijd</th>
                 ${showSuggested ? '<th title="Na verdeling over het bestaande rooster">Voorgestelde tijd</th>' : ''}
+                <th title="Inplannen = nog geen pauze, Verschuiven = bestaande pauze aanpassen">Actie</th>
             </tr>`;
         }
 
@@ -3057,6 +3148,30 @@
                 }
             }
 
+            // Actie cell: "Inplannen" for needsAction rows, "Verschuiven" for rows with a parseable break time
+            const existingBreakMins = ptParseBreakTimeFromInfo(row.BreaksInfo);
+            const currentShift      = ptBreakShifts.get(dataIdx) ?? 0;
+            let actieCell = '<td></td>';
+            if (row.needsAction) {
+                actieCell = `<td class="pt-shift-cell"><span class="pt-badge-inplannen">Inplannen</span></td>`;
+            } else if (existingBreakMins !== null) {
+                const shiftedMins = ((existingBreakMins + currentShift) % 1440 + 1440) % 1440;
+                const shiftedStr  = ptMinsToHHMM(shiftedMins);
+                const deltaLabel  = currentShift !== 0
+                    ? `<span class="pt-shift-delta">&nbsp;${currentShift > 0 ? '+' : ''}${currentShift}m</span>` : '';
+                const resetBtn    = currentShift !== 0
+                    ? `<button class="pt-shift-btn" onclick="ptResetShift(${dataIdx})" title="Reset naar origineel">↺</button>` : '';
+                actieCell = `<td class="pt-shift-cell">
+                    <span class="pt-badge-verschuiven">Verschuiven</span>
+                    <div class="pt-shift-ctrl">
+                        <button class="pt-shift-btn" onclick="ptShiftBreak(${dataIdx},-30)" title="30 min eerder">◀</button>
+                        <span class="pt-shift-time">${shiftedStr}</span>${deltaLabel}
+                        ${resetBtn}
+                        <button class="pt-shift-btn" onclick="ptShiftBreak(${dataIdx},30)" title="30 min later">▶</button>
+                    </div>
+                </td>`;
+            }
+
             return `
                 <tr class="${row.needsAction ? 'pt-row-action' : ''}">
                     <td>${escapeHtml(row.Run)}</td>
@@ -3070,6 +3185,7 @@
                     <td style="text-align:center">${row.recht45 ? '<span class="pt-ja">JA</span>' : ''}</td>
                     <td class="pt-ideaal">${idealStr}</td>
                     ${suggestedCell}
+                    ${actieCell}
                 </tr>
             `;
         }).join('');
@@ -3108,10 +3224,13 @@
             newBreaks.set(slotMins, (newBreaks.get(slotMins) ?? 0) + 1);
         });
 
+        // Use effective schedule (includes manual shift overrides) for chart bars
+        const chartSched = ptGetEffectiveSchedule();
+
         // Slot range: union of breaks + capacity data
         const hasCapBg = ptCapacityData.size > 0;
         const allSlots = new Set([
-            ...ptScheduleData.keys(), ...newBreaks.keys(),
+            ...chartSched.keys(), ...newBreaks.keys(),
             ...(hasCapBg ? ptCapacityData.keys() : [])
         ]);
 
@@ -3142,10 +3261,10 @@
 
         // Fixed y-axis: stable across ideaal/geadviseerd toggle (based on schedule max)
         let scheduleMax = 0;
-        ptScheduleData.forEach(c => { if (c > scheduleMax) scheduleMax = c; });
+        chartSched.forEach(c => { if (c > scheduleMax) scheduleMax = c; });
         let fixedMax = Math.max(20, Math.ceil(scheduleMax / 5) * 5);
         slots.forEach(s => {
-            const total = (ptScheduleData.get(s) ?? 0) + (newBreaks.get(s) ?? 0);
+            const total = (chartSched.get(s) ?? 0) + (newBreaks.get(s) ?? 0);
             if (total > fixedMax) fixedMax = Math.ceil(total / 5) * 5;
         });
 
@@ -3213,7 +3332,7 @@
         let xLabels = '';
         slots.forEach((s, i) => {
             const x          = padL + i * (barW + gap);
-            const existCount = ptScheduleData.get(s) ?? 0;
+            const existCount = chartSched.get(s) ?? 0;
             const newCount   = newBreaks.get(s) ?? 0;
             const cap        = ptCapacityData.get(s);
             const margeTip   = cap ? ` | marge: ${cap.marge} (${cap.gepland}/${cap.maximum})` : '';
