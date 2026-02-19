@@ -1081,6 +1081,119 @@
             border-color: var(--accent);
             background: rgba(88, 166, 255, 0.08);
         }
+
+        /* ===== Tab Navigation ===== */
+        .tab-nav {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 16px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        .tab-btn {
+            padding: 8px 20px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            margin-bottom: -2px;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition);
+            border-radius: var(--radius) var(--radius) 0 0;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+            background: var(--bg-secondary);
+        }
+
+        .tab-btn.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        .tab-panel {
+            /* no special styles needed, just used for show/hide */
+        }
+
+        /* ===== Pauzetijden Module ===== */
+        .pt-import-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .pt-import-left {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .pt-paste-area {
+            margin-bottom: 14px;
+        }
+
+        .pt-badge-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            background: var(--success-bg);
+            color: var(--success);
+            border: 1px solid rgba(63, 185, 80, 0.3);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .pt-badge-zero {
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+            border-color: var(--border);
+        }
+
+        .pt-row-action td {
+            background: rgba(63, 185, 80, 0.06);
+        }
+
+        .pt-ja {
+            display: inline-block;
+            padding: 2px 8px;
+            background: var(--success-bg);
+            color: var(--success);
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .pt-ideaal {
+            font-weight: 700;
+            font-size: 1.05rem;
+            color: var(--accent);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .pt-breaks-info {
+            max-width: 140px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+        }
+
+        .btn-file-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
@@ -1103,6 +1216,15 @@
                 <div class="clock" id="clock">--:--:--</div>
             </div>
         </header>
+
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="actielijst" onclick="switchTab('actielijst')">Actielijst</button>
+            <button class="tab-btn" data-tab="pauzetijden" onclick="switchTab('pauzetijden')">Pauzetijden</button>
+        </div>
+
+        <!-- Tab Panel: Actielijst -->
+        <div id="tab-actielijst" class="tab-panel">
 
         <!-- Toggle Buttons -->
         <div>
@@ -1253,6 +1375,73 @@
                 </div>
             </div>
         </div>
+
+        </div><!-- /tab-actielijst -->
+
+        <!-- Tab Panel: Pauzetijden -->
+        <div id="tab-pauzetijden" class="tab-panel" style="display:none">
+
+            <!-- Import Bar -->
+            <div class="pt-import-bar">
+                <div class="pt-import-left">
+                    <label class="btn btn-secondary btn-file-label" for="ptFileInput">
+                        &#128193; CSV laden
+                        <input type="file" id="ptFileInput" accept=".csv,.txt" style="display:none" onchange="ptHandleFileInput(event)">
+                    </label>
+                    <button class="btn btn-secondary" onclick="ptTogglePaste()">&#128203; Plakken</button>
+                    <button class="btn btn-danger btn-sm" onclick="ptClear()">Wissen</button>
+                </div>
+                <div id="ptActionBadge" class="pt-badge-action pt-badge-zero">
+                    <span>&#9210;</span> <span id="ptActionCount">0</span> actie nodig
+                </div>
+            </div>
+
+            <!-- Paste Panel -->
+            <div id="ptPasteArea" class="pt-paste-area" style="display:none">
+                <textarea class="bulk-textarea" id="ptPasteText" style="min-height:130px" placeholder="Plak hier de CSV inhoud (met of zonder koptekstregel)&#10;&#10;Verwacht formaat: Type,Run,Vehicle,Out,In,Breaks Info"></textarea>
+                <div class="bulk-actions">
+                    <button class="btn btn-primary btn-sm" onclick="ptImportFromPaste()">Importeer</button>
+                    <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ptPasteText').value=''">Leegmaken</button>
+                </div>
+            </div>
+
+            <!-- Table -->
+            <div class="table-container">
+                <div class="table-header-bar">
+                    <h2>Pauzetijden</h2>
+                    <div class="table-filters">
+                        <button class="filter-btn pt-filter-btn active" data-filter="actie" onclick="ptSetFilter('actie')">Actie nodig</button>
+                        <button class="filter-btn pt-filter-btn" data-filter="all" onclick="ptSetFilter('all')">Alle runs</button>
+                    </div>
+                </div>
+                <div class="table-scroll">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Run</th>
+                                <th>Wagen</th>
+                                <th>Uit</th>
+                                <th>In</th>
+                                <th>Breaks Info</th>
+                                <th>Dienstduur</th>
+                                <th>&gt;&nbsp;5,5u</th>
+                                <th>Pauze (recht)</th>
+                                <th>45 min</th>
+                                <th>Ideale pauzetijd</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="ptTableBody"></tbody>
+                    </table>
+                    <div class="empty-state" id="ptEmptyState">
+                        <div class="empty-state-icon">&#9210;</div>
+                        <p id="ptEmptyText">Nog geen pauzetijden geladen.<br>Upload een CSV of plak de inhoud hierboven.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /tab-pauzetijden -->
+
     </div>
 
     <!-- Toast Container -->
@@ -1984,6 +2173,359 @@
         div.textContent = str;
         return div.innerHTML;
     }
+
+    // ── Tab Switching ──
+    function switchTab(tabName) {
+        document.querySelectorAll('.tab-panel').forEach(panel => {
+            panel.style.display = 'none';
+        });
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
+        const panel = document.getElementById('tab-' + tabName);
+        if (panel) panel.style.display = '';
+
+        if (tabName === 'pauzetijden') {
+            ptLoadFromStorage();
+            ptRender();
+        }
+    }
+
+    /* ===================================================================
+       PAUZETIJDEN MODULE
+       Replicates the Excel Power Query logic in JavaScript.
+       =================================================================== */
+
+    const PT_STORAGE_KEY = 'voertuig-actie-planner-pauzetijden';
+    let ptData = [];
+    let ptFilter = 'actie'; // 'actie' or 'all'
+
+    // ── Storage ──
+    function ptLoadFromStorage() {
+        const saved = localStorage.getItem(PT_STORAGE_KEY);
+        if (saved) {
+            try { ptData = JSON.parse(saved); } catch(e) { ptData = []; }
+        }
+    }
+
+    function ptSaveToStorage() {
+        localStorage.setItem(PT_STORAGE_KEY, JSON.stringify(ptData));
+    }
+
+    function ptClear() {
+        ptData = [];
+        ptSaveToStorage();
+        ptRender();
+        showToast('Pauzetijden data gewist', 'info');
+    }
+
+    // ── CSV Parsing ──
+    function ptParseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const c = line[i];
+            if (c === '"') {
+                if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+                else inQuotes = !inQuotes;
+            } else if (c === ',' && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += c;
+            }
+        }
+        result.push(current.trim());
+        return result;
+    }
+
+    function ptCleanText(val) {
+        if (val === null || val === undefined) return '';
+        return String(val).replace(/"/g, '').trim();
+    }
+
+    // Parse a time string like "08:30", "08.30", "24:30" → total minutes from midnight
+    // Returns null if invalid. Values >= 24h are reduced mod 24 (like Power Query).
+    function ptParseTimeStr(str) {
+        str = ptCleanText(str);
+        if (!str) return null;
+        str = str.replace('.', ':');
+        const parts = str.split(':');
+        if (parts.length < 2) return null;
+        const hh = parseInt(parts[0], 10);
+        const mm = parseInt(parts[1], 10);
+        if (isNaN(hh) || isNaN(mm) || mm < 0 || mm >= 60) return null;
+        // mod 24 to mirror Power Query's Number.Mod(hh, 24)
+        return (hh % 24) * 60 + mm;
+    }
+
+    function ptMinsToHHMM(totalMins) {
+        if (totalMins === null || totalMins === undefined || isNaN(totalMins)) return '';
+        const h = Math.floor(((totalMins % 1440) + 1440) % 1440 / 60);
+        const m = Math.round(totalMins) % 60;
+        return String(h).padStart(2, '0') + ':' + String(Math.abs(m)).padStart(2, '0');
+    }
+
+    function ptFormatDuration(totalMins) {
+        if (totalMins === null || totalMins === undefined || isNaN(totalMins)) return '';
+        const h = Math.floor(totalMins / 60);
+        const m = totalMins % 60;
+        return h + ':' + String(m).padStart(2, '0');
+    }
+
+    // Round up to :25 or :55 (mirrors RoundUpDTTo25_55 in Power Query)
+    function ptRoundUpTo2555(minsFloat) {
+        if (minsFloat === null) return null;
+        const totalH = Math.floor(minsFloat / 60);
+        const remainM = minsFloat - totalH * 60; // fractional minutes within the hour
+
+        let targetM;
+        if (remainM <= 25) {
+            targetM = 25;
+        } else if (remainM <= 55) {
+            targetM = 55;
+        } else {
+            // > 55 → carry to next hour at :25
+            return (totalH + 1) * 60 + 25;
+        }
+        return totalH * 60 + targetM;
+    }
+
+    // ── Process one CSV row → computed row object ──
+    function ptProcessRow(raw) {
+        const vehicleStr = ptCleanText(raw.Vehicle).replace(/[\s,]/g, '');
+        const vehicle = vehicleStr === '' ? null : parseInt(vehicleStr, 10);
+
+        const outMins = ptParseTimeStr(raw.Out);
+
+        // Power Query fills empty In with "00:00"
+        let inStr = ptCleanText(raw.In);
+        if (!inStr) inStr = '00:00';
+        let inMins = ptParseTimeStr(inStr);
+        if (inMins === null) inMins = 0;
+
+        // Dienstduur: handle midnight crossover (like Power Query)
+        let dienstduurMins = null;
+        if (outMins !== null) {
+            let inForCalc = inMins;
+            if (inForCalc < outMins) inForCalc += 24 * 60; // next day
+            dienstduurMins = inForCalc - outMins;
+        }
+
+        // Meer dan 5,5 uur → > 330 min
+        const meerDan5_5 = (dienstduurMins !== null && dienstduurMins > 330) ? 'JA' : null;
+
+        // Pauzeduur (recht)
+        let pauzeduurMins = 0;
+        if (dienstduurMins !== null) {
+            if (dienstduurMins >= 600) pauzeduurMins = 45;      // ≥ 10h
+            else if (dienstduurMins > 330) pauzeduurMins = 30;  // > 5h30m
+        }
+
+        // Heeft recht op 45 min pauze → ≥ 10h = 600 min
+        const recht45 = (dienstduurMins !== null && dienstduurMins >= 600) ? 'JA' : null;
+
+        // Ideale pauzetijd = Out + (dienstduur − pauzeduur) / 2, afgerond naar boven op :25 of :55
+        let idealePauzetijdMins = null;
+        if (outMins !== null && dienstduurMins !== null && dienstduurMins > 0) {
+            const werkDur = dienstduurMins - pauzeduurMins;
+            if (werkDur >= 0) {
+                const halfWerk = werkDur / 2;
+                const pauzeRaw = outMins + halfWerk;
+                const pauzeRounded = ptRoundUpTo2555(pauzeRaw);
+                idealePauzetijdMins = pauzeRounded % (24 * 60); // extract time portion
+            }
+        }
+
+        // Actie nodig: BreaksInfo leeg + meerDan5_5 = JA + Vehicle < 7000
+        const breaksInfo = ptCleanText(raw.BreaksInfo);
+        const needsAction = (
+            breaksInfo === '' &&
+            meerDan5_5 === 'JA' &&
+            vehicle !== null &&
+            !isNaN(vehicle) &&
+            vehicle < 7000
+        );
+
+        return {
+            Type: ptCleanText(raw.Type),
+            Run: ptCleanText(raw.Run),
+            Vehicle: vehicle,
+            Out: outMins !== null ? ptMinsToHHMM(outMins) : '',
+            In: ptMinsToHHMM(inMins),
+            BreaksInfo: breaksInfo,
+            dienstduurMins,
+            meerDan5_5,
+            pauzeduurMins,
+            recht45,
+            idealePauzetijdMins,
+            needsAction,
+        };
+    }
+
+    // ── Import CSV text ──
+    function ptImportCSV(text) {
+        text = text.replace(/\r/g, '');
+        const lines = text.split('\n').filter(l => l.trim());
+        if (lines.length === 0) {
+            showToast('Geen data gevonden', 'error');
+            return;
+        }
+
+        // Detect if first line is a header (contains "Type" or "Run" or "Vehicle")
+        const firstLine = lines[0].toLowerCase();
+        const hasHeader = firstLine.includes('type') || firstLine.includes('run') || firstLine.includes('vehicle');
+        const dataLines = hasHeader ? lines.slice(1) : lines;
+
+        const rows = [];
+        dataLines.forEach(line => {
+            if (!line.trim()) return;
+            const parts = ptParseCSVLine(line);
+            if (parts.length < 5) return;
+            rows.push(ptProcessRow({
+                Type: parts[0],
+                Run: parts[1],
+                Vehicle: parts[2],
+                Out: parts[3],
+                In: parts[4],
+                BreaksInfo: parts[5] || '',
+            }));
+        });
+
+        if (rows.length === 0) {
+            showToast('Geen geldige rijen gevonden in CSV', 'error');
+            return;
+        }
+
+        ptData = rows;
+        ptSaveToStorage();
+        ptRender();
+        const actionCount = rows.filter(r => r.needsAction).length;
+        showToast(`${rows.length} rijen geladen — ${actionCount} actie nodig`, 'success');
+    }
+
+    // ── File & Paste handlers ──
+    function ptHandleFileInput(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => ptImportCSV(e.target.result);
+        // Use windows-1252 to match the Power Query encoding
+        reader.readAsText(file, 'windows-1252');
+        // Reset so the same file can be re-loaded
+        event.target.value = '';
+    }
+
+    function ptTogglePaste() {
+        const area = document.getElementById('ptPasteArea');
+        const visible = area.style.display !== 'none';
+        area.style.display = visible ? 'none' : '';
+        if (!visible) document.getElementById('ptPasteText').focus();
+    }
+
+    function ptImportFromPaste() {
+        const text = document.getElementById('ptPasteText').value;
+        if (!text.trim()) {
+            showToast('Plak eerst CSV data in het tekstvak', 'error');
+            return;
+        }
+        ptImportCSV(text);
+        document.getElementById('ptPasteText').value = '';
+        document.getElementById('ptPasteArea').style.display = 'none';
+    }
+
+    // ── Filter ──
+    function ptSetFilter(filter) {
+        ptFilter = filter;
+        document.querySelectorAll('.pt-filter-btn').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.filter === filter);
+        });
+        ptRender();
+    }
+
+    function ptGetFiltered() {
+        if (ptFilter === 'actie') return ptData.filter(r => r.needsAction);
+        return ptData;
+    }
+
+    // ── Render ──
+    function ptRender() {
+        const tbody = document.getElementById('ptTableBody');
+        const empty = document.getElementById('ptEmptyState');
+        const emptyText = document.getElementById('ptEmptyText');
+        const badge = document.getElementById('ptActionBadge');
+        const countEl = document.getElementById('ptActionCount');
+        if (!tbody) return;
+
+        const actionCount = ptData.filter(r => r.needsAction).length;
+        countEl.textContent = actionCount;
+        badge.classList.toggle('pt-badge-zero', actionCount === 0);
+
+        const data = ptGetFiltered();
+
+        if (data.length === 0) {
+            tbody.innerHTML = '';
+            empty.style.display = 'block';
+            emptyText.innerHTML = ptData.length === 0
+                ? 'Nog geen pauzetijden geladen.<br>Upload een CSV of plak de inhoud hierboven.'
+                : 'Geen rijen komen overeen met het huidige filter.';
+            return;
+        }
+
+        empty.style.display = 'none';
+        tbody.innerHTML = data.map(row => {
+            const idealStr = row.idealePauzetijdMins !== null ? ptMinsToHHMM(row.idealePauzetijdMins) : '';
+            const dienstStr = row.dienstduurMins !== null ? ptFormatDuration(row.dienstduurMins) : '';
+            const pauzeStr = ptFormatDuration(row.pauzeduurMins) || '0:00';
+            const vehicleDisplay = row.Vehicle !== null && !isNaN(row.Vehicle) ? row.Vehicle : '';
+
+            return `
+                <tr class="${row.needsAction ? 'pt-row-action' : ''}">
+                    <td>${escapeHtml(row.Run)}</td>
+                    <td class="td-wagon">${vehicleDisplay}</td>
+                    <td class="td-time">${escapeHtml(row.Out)}</td>
+                    <td class="td-time">${escapeHtml(row.In)}</td>
+                    <td class="pt-breaks-info" title="${escapeHtml(row.BreaksInfo)}">${escapeHtml(row.BreaksInfo) || '<span style="color:var(--text-muted);font-style:italic">leeg</span>'}</td>
+                    <td class="td-time">${dienstStr}</td>
+                    <td style="text-align:center">${row.meerDan5_5 ? '<span class="pt-ja">JA</span>' : ''}</td>
+                    <td class="td-time">${pauzeStr}</td>
+                    <td style="text-align:center">${row.recht45 ? '<span class="pt-ja">JA</span>' : ''}</td>
+                    <td class="pt-ideaal">${idealStr}</td>
+                    <td>
+                        ${row.needsAction && idealStr ? `<button class="btn btn-primary btn-sm" onclick="ptNaarActielijst(${vehicleDisplay}, '${idealStr}')" title="Voeg toe aan actielijst">+ Actielijst</button>` : ''}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // ── Naar Actielijst ──
+    function ptNaarActielijst(vehicle, idealePauzetijd) {
+        if (!vehicle || !idealePauzetijd) return;
+        switchTab('actielijst');
+        toggleDrawer(true);
+        setTimeout(() => {
+            document.getElementById('formType').value = 'laadpauze';
+            document.getElementById('formWagon').value = String(vehicle);
+            document.getElementById('formDoeltijd').value = idealePauzetijd;
+            // trigger change event so label updates correctly
+            document.getElementById('formType').dispatchEvent(new Event('change'));
+            document.getElementById('formWagon').focus();
+            showToast(`Wagen ${vehicle} klaar voor invoer — controleer actietijd`, 'info');
+        }, 60);
+    }
+
+    // ── Load pauzetijden on init if already saved ──
+    document.addEventListener('DOMContentLoaded', () => {
+        ptLoadFromStorage();
+        // Pre-update the badge even when on actielijst tab
+        const actionCount = ptData.filter(r => r.needsAction).length;
+        const countEl = document.getElementById('ptActionCount');
+        const badge = document.getElementById('ptActionBadge');
+        if (countEl) countEl.textContent = actionCount;
+        if (badge) badge.classList.toggle('pt-badge-zero', actionCount === 0);
+    });
     </script>
 </body>
 </html>
