@@ -2571,17 +2571,49 @@
         } catch(e) { /* ignore corrupt data */ }
     }
 
+    // Slot-comparison helper for the spreading algorithm.
+    // Returns true if the candidate slot is strictly better than the current best.
+    function isSlotBetter(candidate, candidateCount, best, bestCount, idealSlot) {
+        // Rule 1: lower count always wins
+        if (candidateCount < bestCount) return true;
+        if (candidateCount > bestCount) return false;
+
+        // Rule 2 (tie on count): prefer slots >= idealSlot (later or equal)
+        //         over slots < idealSlot (earlier than ideal)
+        const candidateLate = candidate >= idealSlot;
+        const bestLate      = best      >= idealSlot;
+        if (candidateLate && !bestLate) return true;
+        if (!candidateLate && bestLate) return false;
+
+        // Rule 3 (same side): prefer the slot closest to ideal
+        const candidateDist = Math.abs(candidate - idealSlot);
+        const bestDist      = Math.abs(best      - idealSlot);
+        return candidateDist < bestDist;
+    }
+
     // Spreading algorithm: greedy assignment of vehicles to 30-min slots.
     // Each slot covers [slot, slot+30) minutes; the break inside that slot is at slot+25.
     // Returns a Map: ptData-index → suggestedMins, or null if spreading is off.
+    //
+    // Slot-selection priority (per vehicle):
+    //   1. Lowest occupancy count (existing + already assigned)
+    //   2. When tied: prefer a slot LATER than (or equal to) the ideal slot
+    //      (drivers prefer a later break over an earlier one)
+    //   3. When still tied: prefer the slot closest to ideal
+    //
+    // Vehicle-processing order:
+    //   Sort by ideal time ASC; when equal, sort by start time (Out) ASC so that
+    //   an early-starting driver claims the ideal slot first and the late-starting
+    //   driver with the same ideal time gets pushed to a later slot.
     function ptGetSuggestedTimes() {
         if (!ptSpreadingEnabled || ptScheduleData.size === 0) return null;
 
-        // Collect vehicles needing action (store their index in ptData)
+        // Collect vehicles needing action
         const vehicles = [];
         ptData.forEach((row, idx) => {
             if (row.needsAction && row.idealePauzetijdMins !== null) {
-                vehicles.push({ idx, idealeMins: row.idealePauzetijdMins });
+                const outMins = ptParseTimeStr(row.Out) ?? 0;
+                vehicles.push({ idx, idealeMins: row.idealePauzetijdMins, outMins });
             }
         });
         if (vehicles.length === 0) return null;
@@ -2592,30 +2624,33 @@
             if (!working.has(m)) working.set(m, 0);
         }
 
-        // Sort vehicles by ideal time so earlier vehicles get first pick
-        vehicles.sort((a, b) => a.idealeMins - b.idealeMins);
+        // Primary sort: ideal time ASC
+        // Secondary sort: start time (Out) ASC → earlier starters get first pick
+        //   so when two vehicles share the same ideal slot the earlier starter keeps
+        //   the ideal time and the later starter is pushed to a later slot.
+        vehicles.sort((a, b) =>
+            a.idealeMins !== b.idealeMins
+                ? a.idealeMins - b.idealeMins
+                : a.outMins - b.outMins
+        );
 
         const result = new Map(); // idx -> suggestedMins
-        const windowSlots = 4;   // look ±4 slots = ±2 hours from ideal
+        const windowSlots = 2;   // look ±2 slots = ±1 hour from ideal
 
         vehicles.forEach(v => {
-            // Slot that contains the ideal time
             const idealSlot = Math.floor(v.idealeMins / 30) * 30;
 
             let bestSlot = idealSlot;
             let bestCount = working.get(idealSlot) ?? 0;
-            let bestDist = 0;
 
             for (let offset = -windowSlots; offset <= windowSlots; offset++) {
-                if (offset === 0) continue; // already have idealSlot as baseline
+                if (offset === 0) continue;
                 const slotMins = ((idealSlot + offset * 30) % 1440 + 1440) % 1440;
                 const count = working.get(slotMins) ?? 0;
-                const dist = Math.abs(offset);
-                // Prefer lower count; break ties by picking closer slot
-                if (count < bestCount || (count === bestCount && dist < bestDist)) {
+
+                if (isSlotBetter(slotMins, count, bestSlot, bestCount, idealSlot)) {
                     bestCount = count;
                     bestSlot = slotMins;
-                    bestDist = dist;
                 }
             }
 
