@@ -1181,6 +1181,26 @@
         }
         .pt-meewegen-label input { width: 13px; height: 13px; cursor: pointer; accent-color: var(--accent); }
 
+        /* Permanent weight-bar (always visible, outside accordion) */
+        .pt-weight-bar {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            padding: 5px 10px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 6px;
+            flex-wrap: wrap;
+        }
+        .pt-weight-bar .pt-meewegen-label {
+            font-size: 0.76rem;
+        }
+
+        /* Clickable wagon cell in pauzetijden table */
+        .td-wagon-pt { cursor: pointer; }
+        .td-wagon-pt:hover { color: var(--accent); background: rgba(59,130,246,0.07); }
+
 
             display: inline-flex;
             align-items: center;
@@ -1500,6 +1520,12 @@
                 </div>
             </div>
 
+            <!-- Always-visible: meewegen toggles -->
+            <div class="pt-weight-bar">
+                <label class="pt-meewegen-label"><input type="checkbox" id="ptPauzesEnabledCheck" checked onchange="ptTogglePauzesEnabled()"> Bestaande pauzes meewegen</label>
+                <label class="pt-meewegen-label"><input type="checkbox" id="ptCapacityEnabledCheck" checked onchange="ptToggleCapacityEnabled()"> Dagverloop meewegen</label>
+            </div>
+
             <!-- Panel: Pas data (run schedule) -->
             <div id="ptPanel-pasdata" class="pt-paste-area" style="display:none">
                 <textarea class="bulk-textarea" id="ptPasteText" style="min-height:130px" placeholder="Plak hier de platte tekst uit het roosterscherm of CSV-export.&#10;&#10;  • Roosterscherm (Schedule Editor):  Run  Voertuig  Uit  In  BreaksInfo&#10;  • CSV-export:  Type,Run,Vehicle,Out,In,Breaks Info"></textarea>
@@ -1513,7 +1539,6 @@
             <div id="ptPanel-pauzes" class="pt-paste-area" style="display:none">
                 <div class="pt-meewegen-row">
                     <p class="bulk-hint" style="margin:0">Plak het bestaande rooster: één regel per tijdvak, bijv. <code>12:00&nbsp;&nbsp;13</code>. Tabs of spaties; ook direct uit Excel plakken.</p>
-                    <label class="pt-meewegen-label"><input type="checkbox" id="ptPauzesEnabledCheck" checked onchange="ptTogglePauzesEnabled()"> Meewegen</label>
                 </div>
                 <textarea class="bulk-textarea" id="ptScheduleText" style="min-height:100px" placeholder="08:00  0&#10;08:30  0&#10;09:00  0&#10;09:30  1&#10;10:00  0&#10;..."></textarea>
                 <div class="bulk-actions" style="margin-top:8px">
@@ -1527,7 +1552,6 @@
             <div id="ptPanel-dagverloop" class="pt-paste-area" style="display:none">
                 <div class="pt-meewegen-row">
                     <p class="bulk-hint" style="margin:0">Plak de tabel: <code>tijdstip&nbsp;&nbsp;geplande_ritten&nbsp;&nbsp;bookings_maximum</code> per rij. Tabs of spaties; ook direct uit Excel. Tijdvakken met veel marge worden bevoordeeld.</p>
-                    <label class="pt-meewegen-label"><input type="checkbox" id="ptCapacityEnabledCheck" checked onchange="ptToggleCapacityEnabled()"> Meewegen</label>
                 </div>
                 <textarea class="bulk-textarea" id="ptCapacityText" style="min-height:100px" placeholder="06:00  12  14&#10;06:30  12  15&#10;07:00  22  24&#10;...&#10;&#10;Of kopieer direct uit Excel (kolommen: Tijd, Geplande ritten, Bookings Maximum)"></textarea>
                 <div class="bulk-actions" style="margin-top:8px">
@@ -2738,6 +2762,14 @@
         showToast('Rooster gewist', 'info');
     }
 
+    function ptCopyWagon(val) {
+        navigator.clipboard.writeText(String(val)).then(() => {
+            showToast(`Wagennummer ${val} gekopieerd`, 'success');
+        }).catch(() => {
+            showToast('Kopiëren mislukt', 'error');
+        });
+    }
+
     function ptToggleSpreading() {
         ptSpreadingEnabled = document.getElementById('ptSpreadToggle').checked;
         const hasData = (ptPauzesEnabled && ptScheduleData.size > 0) ||
@@ -3028,7 +3060,7 @@
             return `
                 <tr class="${row.needsAction ? 'pt-row-action' : ''}">
                     <td>${escapeHtml(row.Run)}</td>
-                    <td class="td-wagon">${vehicleDisplay}</td>
+                    <td class="${vehicleDisplay ? 'td-wagon td-wagon-pt' : 'td-wagon'}" ${vehicleDisplay ? `onclick="ptCopyWagon(${vehicleDisplay})" title="Klik om ${vehicleDisplay} te kopiëren"` : ''}>${vehicleDisplay}</td>
                     <td class="td-time">${escapeHtml(row.Out)}</td>
                     <td class="td-time">${escapeHtml(row.In)}</td>
                     <td class="pt-breaks-info" title="${escapeHtml(row.BreaksInfo)}">${escapeHtml(row.BreaksInfo) || '<span style="color:var(--text-muted);font-style:italic">leeg</span>'}</td>
