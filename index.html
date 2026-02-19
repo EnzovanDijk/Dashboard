@@ -1179,6 +1179,19 @@
             font-variant-numeric: tabular-nums;
         }
 
+        .pt-verspreid {
+            font-weight: 700;
+            font-size: 1.05rem;
+            color: var(--warning);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .pt-verspreid-icon {
+            font-size: 0.7rem;
+            vertical-align: middle;
+            opacity: 0.7;
+        }
+
         .pt-breaks-info {
             max-width: 140px;
             overflow: hidden;
@@ -1405,6 +1418,27 @@
                 </div>
             </div>
 
+            <!-- Verdeling / Plan Section -->
+            <button class="drawer-toggle" id="ptPlanToggle" onclick="ptTogglePlan()" style="margin-bottom:12px;display:inline-flex">
+                <span class="drawer-toggle-icon">&#9660;</span>
+                Verdeling bestaand rooster
+            </button>
+            <div class="drawer" id="ptPlanDrawer">
+                <div class="drawer-inner" style="padding-top:0">
+                    <p class="bulk-hint" style="margin-bottom:8px">Plak het bestaande rooster: één regel per tijdvak met "tijdstip&nbsp;&nbsp;aantal", bijv. <code>12:00&nbsp;&nbsp;13</code>. Je kunt ook direct uit Excel of een tabel plakken (tabs worden herkend).</p>
+                    <textarea class="bulk-textarea" id="ptScheduleText" style="min-height:110px" placeholder="08:00  0&#10;08:30  0&#10;09:00  0&#10;09:30  1&#10;10:00  0&#10;10:30  7&#10;11:00  5&#10;..."></textarea>
+                    <div class="bulk-actions" style="margin-top:8px;align-items:center;flex-wrap:wrap">
+                        <button class="btn btn-primary btn-sm" onclick="ptLoadSchedule()">Rooster laden</button>
+                        <button class="btn btn-secondary btn-sm" onclick="ptClearSchedule()">Rooster wissen</button>
+                        <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;margin-left:4px">
+                            <input type="checkbox" id="ptSpreadToggle" onchange="ptToggleSpreading()" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
+                            Verdeling toepassen
+                        </label>
+                    </div>
+                    <div id="ptScheduleStatus" style="margin-top:8px;font-size:0.78rem;color:var(--text-muted)"></div>
+                </div>
+            </div>
+
             <!-- Table -->
             <div class="table-container">
                 <div class="table-header-bar">
@@ -1416,21 +1450,7 @@
                 </div>
                 <div class="table-scroll">
                     <table>
-                        <thead>
-                            <tr>
-                                <th>Run</th>
-                                <th>Wagen</th>
-                                <th>Uit</th>
-                                <th>In</th>
-                                <th>Breaks Info</th>
-                                <th>Dienstduur</th>
-                                <th>&gt;&nbsp;5,5u</th>
-                                <th>Pauze (recht)</th>
-                                <th>45 min</th>
-                                <th>Ideale pauzetijd</th>
-                                <th></th>
-                            </tr>
-                        </thead>
+                        <thead id="ptTableHead"></thead>
                         <tbody id="ptTableBody"></tbody>
                     </table>
                     <div class="empty-state" id="ptEmptyState">
@@ -2187,6 +2207,7 @@
 
         if (tabName === 'pauzetijden') {
             ptLoadFromStorage();
+            ptLoadPlanFromStorage();
             ptRender();
         }
     }
@@ -2449,8 +2470,166 @@
         return ptData;
     }
 
+    // ── Plan / Verdeling ──
+    let ptScheduleData = new Map(); // slotMins (multiples of 30) -> existing count
+    let ptSpreadingEnabled = false;
+
+    function ptTogglePlan() {
+        const drawer = document.getElementById('ptPlanDrawer');
+        const toggle = document.getElementById('ptPlanToggle');
+        const isOpen = drawer.classList.toggle('open');
+        toggle.classList.toggle('open', isOpen);
+    }
+
+    function ptParseScheduleLine(line) {
+        // Accept "HH:MM count", "HH.MM count", tab-separated, multiple spaces
+        const trimmed = line.trim();
+        if (!trimmed) return null;
+        // Match: time (colon or dot separator) followed by whitespace and a number
+        const match = trimmed.match(/^(\d{1,2})[.:](\d{2})\s+(\d+)/);
+        if (!match) return null;
+        const hh = parseInt(match[1], 10);
+        const mm = parseInt(match[2], 10);
+        const count = parseInt(match[3], 10);
+        if (isNaN(hh) || isNaN(mm) || isNaN(count) || mm >= 60) return null;
+        return { slotMins: hh * 60 + mm, count };
+    }
+
+    function ptLoadSchedule() {
+        const text = document.getElementById('ptScheduleText').value;
+        const lines = text.replace(/\r/g, '').split('\n');
+        const map = new Map();
+        let parsed = 0, skipped = 0;
+
+        lines.forEach(line => {
+            const r = ptParseScheduleLine(line);
+            if (r) { map.set(r.slotMins, r.count); parsed++; }
+            else if (line.trim()) skipped++;
+        });
+
+        if (parsed === 0) {
+            showToast('Geen geldige roosterregels herkend', 'error');
+            return;
+        }
+
+        ptScheduleData = map;
+        ptSavePlanToStorage();
+        document.getElementById('ptScheduleStatus').textContent =
+            `${parsed} tijdvakken geladen${skipped ? ` (${skipped} regels overgeslagen)` : ''}`;
+        ptRender();
+        showToast(`Rooster geladen: ${parsed} tijdvakken`, 'success');
+    }
+
+    function ptClearSchedule() {
+        ptScheduleData = new Map();
+        ptSpreadingEnabled = false;
+        const toggle = document.getElementById('ptSpreadToggle');
+        if (toggle) toggle.checked = false;
+        document.getElementById('ptScheduleStatus').textContent = '';
+        ptSavePlanToStorage();
+        ptRender();
+        showToast('Rooster gewist', 'info');
+    }
+
+    function ptToggleSpreading() {
+        ptSpreadingEnabled = document.getElementById('ptSpreadToggle').checked;
+        if (ptSpreadingEnabled && ptScheduleData.size === 0) {
+            showToast('Laad eerst een rooster via "Verdeling bestaand rooster"', 'error');
+            ptSpreadingEnabled = false;
+            document.getElementById('ptSpreadToggle').checked = false;
+            return;
+        }
+        ptSavePlanToStorage();
+        ptRender();
+    }
+
+    function ptSavePlanToStorage() {
+        localStorage.setItem(PT_STORAGE_KEY + '-plan', JSON.stringify({
+            schedule: Array.from(ptScheduleData.entries()),
+            spreading: ptSpreadingEnabled,
+            text: document.getElementById('ptScheduleText')?.value || ''
+        }));
+    }
+
+    function ptLoadPlanFromStorage() {
+        const saved = localStorage.getItem(PT_STORAGE_KEY + '-plan');
+        if (!saved) return;
+        try {
+            const obj = JSON.parse(saved);
+            if (Array.isArray(obj.schedule)) ptScheduleData = new Map(obj.schedule);
+            ptSpreadingEnabled = !!obj.spreading;
+            const toggle = document.getElementById('ptSpreadToggle');
+            if (toggle) toggle.checked = ptSpreadingEnabled;
+            if (obj.text) {
+                const ta = document.getElementById('ptScheduleText');
+                if (ta) ta.value = obj.text;
+            }
+            if (ptScheduleData.size > 0) {
+                const status = document.getElementById('ptScheduleStatus');
+                if (status) status.textContent = `${ptScheduleData.size} tijdvakken geladen`;
+            }
+        } catch(e) { /* ignore corrupt data */ }
+    }
+
+    // Spreading algorithm: greedy assignment of vehicles to 30-min slots.
+    // Each slot covers [slot, slot+30) minutes; the break inside that slot is at slot+25.
+    // Returns a Map: ptData-index → suggestedMins, or null if spreading is off.
+    function ptGetSuggestedTimes() {
+        if (!ptSpreadingEnabled || ptScheduleData.size === 0) return null;
+
+        // Collect vehicles needing action (store their index in ptData)
+        const vehicles = [];
+        ptData.forEach((row, idx) => {
+            if (row.needsAction && row.idealePauzetijdMins !== null) {
+                vehicles.push({ idx, idealeMins: row.idealePauzetijdMins });
+            }
+        });
+        if (vehicles.length === 0) return null;
+
+        // Working schedule: start from existing counts, ensure all 30-min slots exist
+        const working = new Map(ptScheduleData);
+        for (let m = 0; m < 1440; m += 30) {
+            if (!working.has(m)) working.set(m, 0);
+        }
+
+        // Sort vehicles by ideal time so earlier vehicles get first pick
+        vehicles.sort((a, b) => a.idealeMins - b.idealeMins);
+
+        const result = new Map(); // idx -> suggestedMins
+        const windowSlots = 4;   // look ±4 slots = ±2 hours from ideal
+
+        vehicles.forEach(v => {
+            // Slot that contains the ideal time
+            const idealSlot = Math.floor(v.idealeMins / 30) * 30;
+
+            let bestSlot = idealSlot;
+            let bestCount = working.get(idealSlot) ?? 0;
+            let bestDist = 0;
+
+            for (let offset = -windowSlots; offset <= windowSlots; offset++) {
+                if (offset === 0) continue; // already have idealSlot as baseline
+                const slotMins = ((idealSlot + offset * 30) % 1440 + 1440) % 1440;
+                const count = working.get(slotMins) ?? 0;
+                const dist = Math.abs(offset);
+                // Prefer lower count; break ties by picking closer slot
+                if (count < bestCount || (count === bestCount && dist < bestDist)) {
+                    bestCount = count;
+                    bestSlot = slotMins;
+                    bestDist = dist;
+                }
+            }
+
+            working.set(bestSlot, (working.get(bestSlot) ?? 0) + 1);
+            // Break time within the chosen slot is at slot+25 min
+            result.set(v.idx, (bestSlot + 25) % 1440);
+        });
+
+        return result;
+    }
+
     // ── Render ──
     function ptRender() {
+        const thead = document.getElementById('ptTableHead');
         const tbody = document.getElementById('ptTableBody');
         const empty = document.getElementById('ptEmptyState');
         const emptyText = document.getElementById('ptEmptyText');
@@ -2462,9 +2641,29 @@
         countEl.textContent = actionCount;
         badge.classList.toggle('pt-badge-zero', actionCount === 0);
 
-        const data = ptGetFiltered();
+        const showSuggested = ptSpreadingEnabled && ptScheduleData.size > 0;
+        const suggestions = showSuggested ? ptGetSuggestedTimes() : null;
+        const filteredData = ptGetFiltered();
 
-        if (data.length === 0) {
+        // Dynamic thead (column set changes when spreading is on)
+        if (thead) {
+            thead.innerHTML = `<tr>
+                <th>Run</th>
+                <th>Wagen</th>
+                <th>Uit</th>
+                <th>In</th>
+                <th>Breaks Info</th>
+                <th>Dienstduur</th>
+                <th>&gt;&nbsp;5,5u</th>
+                <th>Pauze (recht)</th>
+                <th>45 min</th>
+                <th>Ideale pauzetijd</th>
+                ${showSuggested ? '<th title="Na verdeling over het bestaande rooster">Voorgestelde tijd</th>' : ''}
+                <th></th>
+            </tr>`;
+        }
+
+        if (filteredData.length === 0) {
             tbody.innerHTML = '';
             empty.style.display = 'block';
             emptyText.innerHTML = ptData.length === 0
@@ -2474,11 +2673,30 @@
         }
 
         empty.style.display = 'none';
-        tbody.innerHTML = data.map(row => {
+        tbody.innerHTML = filteredData.map(row => {
+            const dataIdx = ptData.indexOf(row);
             const idealStr = row.idealePauzetijdMins !== null ? ptMinsToHHMM(row.idealePauzetijdMins) : '';
             const dienstStr = row.dienstduurMins !== null ? ptFormatDuration(row.dienstduurMins) : '';
             const pauzeStr = ptFormatDuration(row.pauzeduurMins) || '0:00';
             const vehicleDisplay = row.Vehicle !== null && !isNaN(row.Vehicle) ? row.Vehicle : '';
+
+            // Suggested time cell
+            let suggestedCell = '';
+            let actionTime = idealStr; // default: use ideal for the "+ Actielijst" button
+            if (showSuggested) {
+                const sugMins = suggestions ? suggestions.get(dataIdx) : null;
+                if (sugMins !== null && sugMins !== undefined && row.needsAction) {
+                    const sugStr = ptMinsToHHMM(sugMins);
+                    const moved = sugMins !== row.idealePauzetijdMins;
+                    suggestedCell = `<td class="${moved ? 'pt-verspreid' : 'pt-ideaal'}"
+                        title="${moved ? 'Verplaatst: slot rond ideale tijd was al bezet' : 'Zelfde als ideale tijd — slot is vrij'}">
+                        ${sugStr}${moved ? ' <span class="pt-verspreid-icon">&#8597;</span>' : ''}
+                    </td>`;
+                    actionTime = sugStr; // use suggested time for the button
+                } else {
+                    suggestedCell = '<td></td>';
+                }
+            }
 
             return `
                 <tr class="${row.needsAction ? 'pt-row-action' : ''}">
@@ -2492,8 +2710,9 @@
                     <td class="td-time">${pauzeStr}</td>
                     <td style="text-align:center">${row.recht45 ? '<span class="pt-ja">JA</span>' : ''}</td>
                     <td class="pt-ideaal">${idealStr}</td>
+                    ${suggestedCell}
                     <td>
-                        ${row.needsAction && idealStr ? `<button class="btn btn-primary btn-sm" onclick="ptNaarActielijst(${vehicleDisplay}, '${idealStr}')" title="Voeg toe aan actielijst">+ Actielijst</button>` : ''}
+                        ${row.needsAction && actionTime ? `<button class="btn btn-primary btn-sm" onclick="ptNaarActielijst(${vehicleDisplay}, '${actionTime}')" title="Voeg toe aan actielijst">+ Actielijst</button>` : ''}
                     </td>
                 </tr>
             `;
@@ -2501,15 +2720,14 @@
     }
 
     // ── Naar Actielijst ──
-    function ptNaarActielijst(vehicle, idealePauzetijd) {
-        if (!vehicle || !idealePauzetijd) return;
+    function ptNaarActielijst(vehicle, doeltijd) {
+        if (!vehicle || !doeltijd) return;
         switchTab('actielijst');
         toggleDrawer(true);
         setTimeout(() => {
             document.getElementById('formType').value = 'laadpauze';
             document.getElementById('formWagon').value = String(vehicle);
-            document.getElementById('formDoeltijd').value = idealePauzetijd;
-            // trigger change event so label updates correctly
+            document.getElementById('formDoeltijd').value = doeltijd;
             document.getElementById('formType').dispatchEvent(new Event('change'));
             document.getElementById('formWagon').focus();
             showToast(`Wagen ${vehicle} klaar voor invoer — controleer actietijd`, 'info');
@@ -2519,7 +2737,8 @@
     // ── Load pauzetijden on init if already saved ──
     document.addEventListener('DOMContentLoaded', () => {
         ptLoadFromStorage();
-        // Pre-update the badge even when on actielijst tab
+        ptLoadPlanFromStorage();
+        // Pre-update the badge even while on the actielijst tab
         const actionCount = ptData.filter(r => r.needsAction).length;
         const countEl = document.getElementById('ptActionCount');
         const badge = document.getElementById('ptActionBadge');
