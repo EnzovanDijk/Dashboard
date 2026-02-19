@@ -1411,7 +1411,7 @@
 
             <!-- Paste Panel -->
             <div id="ptPasteArea" class="pt-paste-area" style="display:none">
-                <textarea class="bulk-textarea" id="ptPasteText" style="min-height:130px" placeholder="Plak hier de CSV inhoud (met of zonder koptekstregel)&#10;&#10;Verwacht formaat: Type,Run,Vehicle,Out,In,Breaks Info"></textarea>
+                <textarea class="bulk-textarea" id="ptPasteText" style="min-height:130px" placeholder="Plak hier CSV-data of de platte tekst uit het roosterscherm.&#10;&#10;Het formaat wordt automatisch herkend:&#10;  • Roosterscherm (Schedule Editor):  Run  Voertuig  Uit  In  BreaksInfo&#10;  • CSV-export:  Type,Run,Vehicle,Out,In,Breaks Info"></textarea>
                 <div class="bulk-actions">
                     <button class="btn btn-primary btn-sm" onclick="ptImportFromPaste()">Importeer</button>
                     <button class="btn btn-secondary btn-sm" onclick="document.getElementById('ptPasteText').value=''">Leegmaken</button>
@@ -2385,20 +2385,50 @@
         };
     }
 
-    // ── Import CSV text ──
-    function ptImportCSV(text) {
-        text = text.replace(/\r/g, '');
-        const lines = text.split('\n').filter(l => l.trim());
-        if (lines.length === 0) {
-            showToast('Geen data gevonden', 'error');
-            return;
-        }
+    // ── Format detection & import ──
 
-        // Detect if first line is a header (contains "Type" or "Run" or "Vehicle")
+    // Detect whether pasted/uploaded text is a CSV or a fixed-width schedule export.
+    // The schedule format has lines of: <RunName> <VehicleInt> <HH:MM> <HH:MM> [BreaksInfo]
+    function ptDetectFormat(text) {
+        const lines = text.split('\n').filter(l => l.trim());
+        const schedRe = /^\s*\S+\s+\d+\s+\d{1,2}:\d{2}\s+\d{1,2}:\d{2}/;
+        const schedMatches = lines.filter(l => schedRe.test(l)).length;
+        // If 3+ lines look like schedule rows it's almost certainly a schedule export
+        return schedMatches >= 3 ? 'schedule' : 'csv';
+    }
+
+    // Parse fixed-width schedule text (the "Schedule Editor - Runs" export format).
+    // Recognises lines like:
+    //   7001-W-1200-1900-    7001 12:00 19:00       Vervallen[7h00]
+    //   PA-0845-1715-R    2586  8:45 17:15                 B[30]
+    //   Tilrun3            8094 13:30 22:00
+    // Lines that don't match (headers, tildes, blanks) are silently skipped.
+    function ptParseScheduleText(text) {
+        const lineRe = /^\s*(\S+)\s+(\d+)\s+(\d{1,2}:\d{2})\s+(\d{1,2}:\d{2})\s*(.*?)\s*$/;
+        const rows = [];
+        text.split('\n').forEach(line => {
+            const m = line.match(lineRe);
+            if (!m) return;
+            if (m[1].toLowerCase() === 'run') return; // header row
+            rows.push(ptProcessRow({
+                Type: '',
+                Run: m[1],
+                Vehicle: m[2],
+                Out: m[3],
+                In: m[4],
+                BreaksInfo: m[5],
+            }));
+        });
+        return rows;
+    }
+
+    // Parse CSV rows (existing logic, extracted for reuse)
+    function ptParseCSVRows(text) {
+        const lines = text.split('\n').filter(l => l.trim());
+        if (lines.length === 0) return [];
         const firstLine = lines[0].toLowerCase();
         const hasHeader = firstLine.includes('type') || firstLine.includes('run') || firstLine.includes('vehicle');
         const dataLines = hasHeader ? lines.slice(1) : lines;
-
         const rows = [];
         dataLines.forEach(line => {
             if (!line.trim()) return;
@@ -2413,9 +2443,19 @@
                 BreaksInfo: parts[5] || '',
             }));
         });
+        return rows;
+    }
+
+    // Main import entry point — accepts both CSV and schedule plaintext
+    function ptImportCSV(text) {
+        text = text.replace(/\r/g, '');
+        if (!text.trim()) { showToast('Geen data gevonden', 'error'); return; }
+
+        const format = ptDetectFormat(text);
+        const rows = format === 'schedule' ? ptParseScheduleText(text) : ptParseCSVRows(text);
 
         if (rows.length === 0) {
-            showToast('Geen geldige rijen gevonden in CSV', 'error');
+            showToast('Geen geldige rijen gevonden', 'error');
             return;
         }
 
@@ -2423,7 +2463,8 @@
         ptSaveToStorage();
         ptRender();
         const actionCount = rows.filter(r => r.needsAction).length;
-        showToast(`${rows.length} rijen geladen — ${actionCount} actie nodig`, 'success');
+        const label = format === 'schedule' ? 'roosterscherm' : 'CSV';
+        showToast(`${rows.length} rijen geladen uit ${label} — ${actionCount} actie nodig`, 'success');
     }
 
     // ── File & Paste handlers ──
@@ -2448,7 +2489,7 @@
     function ptImportFromPaste() {
         const text = document.getElementById('ptPasteText').value;
         if (!text.trim()) {
-            showToast('Plak eerst CSV data in het tekstvak', 'error');
+            showToast('Plak eerst data in het tekstvak', 'error');
             return;
         }
         ptImportCSV(text);
