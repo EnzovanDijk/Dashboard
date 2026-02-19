@@ -1473,9 +1473,15 @@
             <div class="pt-chart-wrap" id="ptChartWrap">
                 <div class="pt-chart-header">
                     <span class="pt-chart-title">Pauzes per tijdvak (30&nbsp;min)</span>
-                    <div class="pt-chart-legend">
-                        <span><span class="pt-legend-swatch" style="background:#94a3b8"></span> Bestaand rooster</span>
-                        <span id="ptLegendNew"><span class="pt-legend-swatch" style="background:#3b82f6"></span> Nieuw toe te kennen (ideaal)</span>
+                    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+                        <div class="pt-chart-legend">
+                            <span><span class="pt-legend-swatch" style="background:#94a3b8"></span> Bestaand rooster</span>
+                            <span id="ptLegendNew"><span class="pt-legend-swatch" style="background:#3b82f6"></span> Nieuw toe te kennen (ideaal)</span>
+                        </div>
+                        <label style="display:inline-flex;align-items:center;gap:5px;font-size:0.78rem;color:var(--text-secondary);cursor:pointer;white-space:nowrap;border-left:1px solid var(--border);padding-left:14px">
+                            <input type="checkbox" id="ptSpreadToggle" onchange="ptToggleSpreading()" style="width:14px;height:14px;cursor:pointer;accent-color:var(--accent)">
+                            Geadviseerd
+                        </label>
                     </div>
                 </div>
                 <div id="ptChartContent">
@@ -1495,10 +1501,6 @@
                     <div class="bulk-actions" style="margin-top:8px;align-items:center;flex-wrap:wrap">
                         <button class="btn btn-primary btn-sm" onclick="ptLoadSchedule()">Rooster laden</button>
                         <button class="btn btn-secondary btn-sm" onclick="ptClearSchedule()">Rooster wissen</button>
-                        <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;margin-left:4px">
-                            <input type="checkbox" id="ptSpreadToggle" onchange="ptToggleSpreading()" style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent)">
-                            Verdeling toepassen
-                        </label>
                     </div>
                     <div id="ptScheduleStatus" style="margin-top:8px;font-size:0.78rem;color:var(--text-muted)"></div>
                 </div>
@@ -2758,7 +2760,10 @@
         );
 
         const result = new Map(); // idx -> suggestedMins
-        const windowSlots = 2;   // look ±2 slots = ±1 hour from ideal
+        // Asymmetric window: drivers prefer later breaks, so allow moving up to
+        // 60 min later but max 30 min earlier (1 slot back, 2 slots forward).
+        const windowBack = 1;
+        const windowFwd  = 2;
 
         vehicles.forEach(v => {
             const idealSlot = Math.floor(v.idealeMins / 30) * 30;
@@ -2766,7 +2771,7 @@
             let bestSlot = idealSlot;
             let bestCount = working.get(idealSlot) ?? 0;
 
-            for (let offset = -windowSlots; offset <= windowSlots; offset++) {
+            for (let offset = -windowBack; offset <= windowFwd; offset++) {
                 if (offset === 0) continue;
                 const slotMins = ((idealSlot + offset * 30) % 1440 + 1440) % 1440;
                 const count = working.get(slotMins) ?? 0;
@@ -2918,11 +2923,15 @@
         const slots = [];
         for (let m = minSlot; m <= maxSlot; m += 30) slots.push(m);
 
-        // Max stacked value for y-axis
-        let maxVal = 1;
+        // Fixed y-axis: based on existing schedule max (stable across ideaal/advies toggle).
+        // Rounded up to nearest 5, minimum 20. Ticks always at 0, 5, 10, 15, 20, ...
+        let scheduleMax = 0;
+        ptScheduleData.forEach(c => { if (c > scheduleMax) scheduleMax = c; });
+        let fixedMax = Math.max(20, Math.ceil(scheduleMax / 5) * 5);
+        // Safety: bump if any stacked bar would overflow
         slots.forEach(s => {
             const total = (ptScheduleData.get(s) ?? 0) + (newBreaks.get(s) ?? 0);
-            if (total > maxVal) maxVal = total;
+            if (total > fixedMax) fixedMax = Math.ceil(total / 5) * 5;
         });
 
         // Layout
@@ -2935,12 +2944,12 @@
         const padT   = 6;
         const totalW = chartW + padL + 4;
         const totalH = chartH + padB + padT;
-        const yScale = chartH / maxVal;
+        const yScale = chartH / fixedMax;
 
-        // Y-axis gridlines + labels
-        const tickStep = maxVal <= 5 ? 1 : maxVal <= 10 ? 2 : maxVal <= 20 ? 5 : 10;
+        // Y-axis gridlines + labels (fixed step of 5)
+        const tickStep = 5;
         let yTicks = '';
-        for (let v = 0; v <= maxVal; v += tickStep) {
+        for (let v = 0; v <= fixedMax; v += tickStep) {
             const y = padT + chartH - v * yScale;
             yTicks += `<line x1="${padL - 3}" y1="${y}" x2="${padL + chartW}" y2="${y}" stroke="var(--border)" stroke-width="0.5"/>`;
             yTicks += `<text x="${padL - 5}" y="${y + 3.5}" text-anchor="end" font-size="9" fill="var(--text-muted)">${v}</text>`;
