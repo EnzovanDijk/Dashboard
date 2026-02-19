@@ -1601,6 +1601,7 @@
                     <button class="btn btn-secondary pt-panel-btn" id="ptBtnDagverloop" onclick="ptTogglePanel('dagverloop')">&#128203; Dagverloop</button>
                     <button class="btn btn-secondary btn-sm" id="ptBtnPerfectie" onclick="ptOpenPerfectie()" title="Bereken optimale pauze-spreiding op basis van dagverloop">&#9733; Perfectie</button>
                     <button class="btn btn-danger btn-sm" onclick="ptClear()">Wissen</button>
+                    <button class="btn btn-danger btn-sm" onclick="ptConfirmClearAll()" title="Wis alle geïmporteerde data">&#128465; Alles wissen</button>
                 </div>
                 <div id="ptActionBadge" class="pt-badge-action pt-badge-zero">
                     <span>&#9210;</span> <span id="ptActionCount">0</span> actie nodig
@@ -1732,6 +1733,22 @@
             <div class="modal-actions">
                 <button class="btn btn-secondary btn-sm" onclick="closeEditModal()">Annuleren</button>
                 <button class="btn btn-primary btn-sm" onclick="saveEditModal()">Opslaan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirm: alles wissen -->
+    <div class="modal-overlay" id="ptClearAllModal" onclick="ptCancelClearAll(event)">
+        <div class="modal" onclick="event.stopPropagation()" style="max-width:380px">
+            <div class="modal-title" style="color:var(--error,#f85149)">&#9888; Alles wissen?</div>
+            <p style="margin:12px 0 18px;font-size:0.88rem;color:var(--text-secondary);line-height:1.55">
+                Dit wist <strong>alle</strong> geïmporteerde data:<br>
+                pas&nbsp;data, huidige&nbsp;pauzes, dagverloop, handmatige&nbsp;verschuivingen en perfectie&nbsp;suggesties.<br><br>
+                <span style="color:var(--text-muted);font-size:0.8rem">Opgeslagen data in de browser wordt ook verwijderd.</span>
+            </p>
+            <div class="modal-actions">
+                <button class="btn btn-secondary btn-sm" onclick="ptCancelClearAll()">Annuleren</button>
+                <button class="btn btn-danger btn-sm" onclick="ptClearAll()">Ja, alles wissen</button>
             </div>
         </div>
     </div>
@@ -2483,6 +2500,58 @@
         ptSaveToStorage();
         ptRender();
         showToast('Pauzetijden data gewist', 'info');
+    }
+
+    function ptConfirmClearAll() {
+        document.getElementById('ptClearAllModal').classList.add('open');
+    }
+
+    function ptCancelClearAll(e) {
+        if (e && e.target !== document.getElementById('ptClearAllModal')) return;
+        document.getElementById('ptClearAllModal').classList.remove('open');
+    }
+
+    function ptClearAll() {
+        document.getElementById('ptClearAllModal').classList.remove('open');
+
+        // Data
+        ptData = [];
+        ptScheduleData = new Map();
+        ptCapacityData = new Map();
+        ptBreakShifts.clear();
+        ptPerfectieResults = [];
+
+        // localStorage
+        localStorage.removeItem(PT_STORAGE_KEY);
+        localStorage.removeItem(PT_STORAGE_KEY + '-plan');
+        localStorage.removeItem('voertuig-actie-planner-pauzetijden-capacity');
+
+        // Textareas + status labels
+        ['ptPasteText', 'ptScheduleText', 'ptCapacityText'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        ['ptScheduleStatus', 'ptCapacityStatus'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = '';
+        });
+
+        // Button loaded-state indicators
+        ptSetBtnLoaded('pasdata',    false);
+        ptSetBtnLoaded('pauzes',     false);
+        ptSetBtnLoaded('dagverloop', false);
+
+        // Reset spreading toggle
+        ptSpreadingEnabled = false;
+        const tog = document.getElementById('ptSpreadToggle');
+        if (tog) tog.checked = false;
+
+        // Close any open panel + perfectie
+        if (ptActivePanel) ptTogglePanel(ptActivePanel);
+        ptClosePerfectie();
+
+        ptRender();
+        showToast('Alle data gewist', 'info');
     }
 
     // ── CSV Parsing ──
