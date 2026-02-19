@@ -1506,6 +1506,23 @@
                 </div>
             </div>
 
+            <!-- Ritverdeling / Capacity Section -->
+            <button class="drawer-toggle" id="ptCapacityToggle" onclick="ptToggleCapacityPlan()" style="margin-bottom:12px;display:inline-flex">
+                <span class="drawer-toggle-icon">&#9660;</span>
+                Ritverdeling &amp; capaciteit
+            </button>
+            <div class="drawer" id="ptCapacityDrawer">
+                <div class="drawer-inner" style="padding-top:0">
+                    <p class="bulk-hint" style="margin-bottom:8px">Plak de tabel met geplande ritten en bookings maximum. Elke rij: <code>tijdstip&nbsp;&nbsp;geplande_ritten&nbsp;&nbsp;bookings_maximum</code> (tabs of spaties). Tijdvakken met veel marge worden automatisch bevoordeeld in de verdeling.</p>
+                    <textarea class="bulk-textarea" id="ptCapacityText" style="min-height:110px" placeholder="06:00  12  14&#10;06:30  12  15&#10;07:00  22  24&#10;...&#10;&#10;Of kopieer direct uit Excel (kolommen: Tijd, Geplande ritten, Bookings Maximum)"></textarea>
+                    <div class="bulk-actions" style="margin-top:8px">
+                        <button class="btn btn-primary btn-sm" onclick="ptLoadCapacity()">Laden</button>
+                        <button class="btn btn-secondary btn-sm" onclick="ptClearCapacity()">Wissen</button>
+                    </div>
+                    <div id="ptCapacityStatus" style="margin-top:8px;font-size:0.78rem;color:var(--text-muted)"></div>
+                </div>
+            </div>
+
             <!-- Table -->
             <div class="table-container">
                 <div class="table-header-bar">
@@ -2596,8 +2613,23 @@
     }
 
     // ── Plan / Verdeling ──
-    let ptScheduleData = new Map(); // slotMins (multiples of 30) -> existing count
+    let ptScheduleData  = new Map(); // slotMins (multiples of 30) -> existing break count
+    let ptCapacityData  = new Map(); // slotMins -> { gepland, maximum, marge }
     let ptSpreadingEnabled = false;
+
+    // How many "virtual break slots" each unit of spare trip-capacity is worth.
+    // marge / CAPACITY_WEIGHT = virtual credit subtracted from raw break count.
+    // E.g. marge=25, CAPACITY_WEIGHT=5 → slot acts as if it has 5 fewer breaks.
+    const CAPACITY_WEIGHT = 5;
+
+    // Effective count used for slot comparison in the spreading algorithm.
+    // Slots with high spare capacity appear "less full" so they are preferred.
+    function ptEffectiveCount(rawCount, slotMins) {
+        if (ptCapacityData.size === 0) return rawCount;
+        const cap = ptCapacityData.get(slotMins);
+        if (!cap || cap.marge <= 0) return rawCount;
+        return rawCount - Math.floor(cap.marge / CAPACITY_WEIGHT);
+    }
 
     function ptTogglePlan() {
         const drawer = document.getElementById('ptPlanDrawer');
@@ -2696,6 +2728,78 @@
         } catch(e) { /* ignore corrupt data */ }
     }
 
+    // ── Capacity / Ritverdeling ──
+    function ptToggleCapacityPlan() {
+        const drawer = document.getElementById('ptCapacityDrawer');
+        const toggle = document.getElementById('ptCapacityToggle');
+        if (!drawer) return;
+        const isOpen = drawer.classList.toggle('open');
+        toggle.classList.toggle('open', isOpen);
+    }
+
+    function ptParseCapacityData(text) {
+        const result = new Map();
+        const re = /(\d{1,2})[.:](\d{2})\s+(\d+)\s+(\d+)/;
+        let parsed = 0;
+        for (const line of text.split('\n')) {
+            const m = line.match(re);
+            if (!m) continue;
+            const slotMins = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+            const slot     = Math.floor(slotMins / 30) * 30;
+            const gepland  = parseInt(m[3], 10);
+            const maximum  = parseInt(m[4], 10);
+            const marge    = Math.max(0, maximum - gepland);
+            result.set(slot, { gepland, maximum, marge });
+            parsed++;
+        }
+        return { data: result, count: parsed };
+    }
+
+    function ptLoadCapacity() {
+        const text = (document.getElementById('ptCapacityText').value || '').trim();
+        if (!text) return;
+        const { data, count } = ptParseCapacityData(text);
+        if (count === 0) {
+            showToast('Geen geldige regels gevonden. Verwacht: tijdstip  geplande_ritten  bookings_maximum', 'error');
+            return;
+        }
+        ptCapacityData = data;
+        ptSaveCapacityToStorage();
+        const el = document.getElementById('ptCapacityStatus');
+        if (el) el.textContent = `${count} tijdvakken geladen.`;
+        ptRender();
+        showToast(`Ritverdeling geladen: ${count} tijdvakken`, 'success');
+    }
+
+    function ptClearCapacity() {
+        ptCapacityData = new Map();
+        const ta = document.getElementById('ptCapacityText');
+        const st = document.getElementById('ptCapacityStatus');
+        if (ta) ta.value = '';
+        if (st) st.textContent = '';
+        localStorage.removeItem('voertuig-actie-planner-pauzetijden-capacity');
+        ptRender();
+    }
+
+    function ptSaveCapacityToStorage() {
+        localStorage.setItem(
+            'voertuig-actie-planner-pauzetijden-capacity',
+            JSON.stringify(Array.from(ptCapacityData.entries()))
+        );
+    }
+
+    function ptLoadCapacityFromStorage() {
+        const raw = localStorage.getItem('voertuig-actie-planner-pauzetijden-capacity');
+        if (!raw) return;
+        try {
+            ptCapacityData = new Map(JSON.parse(raw));
+            if (ptCapacityData.size > 0) {
+                const el = document.getElementById('ptCapacityStatus');
+                if (el) el.textContent = `${ptCapacityData.size} tijdvakken geladen (uit opslag).`;
+            }
+        } catch(e) { /* ignore corrupt data */ }
+    }
+
     // Slot-comparison helper for the spreading algorithm.
     // Returns true if the candidate slot is strictly better than the current best.
     function isSlotBetter(candidate, candidateCount, best, bestCount, idealSlot) {
@@ -2768,17 +2872,19 @@
         vehicles.forEach(v => {
             const idealSlot = Math.floor(v.idealeMins / 30) * 30;
 
-            let bestSlot = idealSlot;
-            let bestCount = working.get(idealSlot) ?? 0;
+            let bestSlot     = idealSlot;
+            // Use effective count (considers spare trip capacity) for comparisons.
+            // working still tracks actual assigned breaks to stay accurate.
+            let bestEffCount = ptEffectiveCount(working.get(idealSlot) ?? 0, idealSlot);
 
             for (let offset = -windowBack; offset <= windowFwd; offset++) {
                 if (offset === 0) continue;
                 const slotMins = ((idealSlot + offset * 30) % 1440 + 1440) % 1440;
-                const count = working.get(slotMins) ?? 0;
+                const effCount = ptEffectiveCount(working.get(slotMins) ?? 0, slotMins);
 
-                if (isSlotBetter(slotMins, count, bestSlot, bestCount, idealSlot)) {
-                    bestCount = count;
-                    bestSlot = slotMins;
+                if (isSlotBetter(slotMins, effCount, bestSlot, bestEffCount, idealSlot)) {
+                    bestEffCount = effCount;
+                    bestSlot     = slotMins;
                 }
             }
 
@@ -2963,16 +3069,26 @@
             const existCount = ptScheduleData.get(s) ?? 0;
             const newCount   = newBreaks.get(s) ?? 0;
 
+            const cap = ptCapacityData.get(s);
+            const margeTip = cap ? ` | marge: ${cap.marge} (${cap.gepland}/${cap.maximum})` : '';
+
             if (existCount > 0) {
                 const bh = existCount * yScale;
                 const by = padT + chartH - bh;
-                bars += `<rect x="${x}" y="${by}" width="${barW}" height="${bh}" fill="#94a3b8" rx="1"><title>${ptMinsToHHMM(s)}: ${existCount} bestaand</title></rect>`;
+                bars += `<rect x="${x}" y="${by}" width="${barW}" height="${bh}" fill="#94a3b8" rx="1"><title>${ptMinsToHHMM(s)}: ${existCount} bestaand${margeTip}</title></rect>`;
             }
             if (newCount > 0) {
                 const existH = existCount * yScale;
                 const nh = newCount * yScale;
                 const ny = padT + chartH - existH - nh;
-                bars += `<rect x="${x}" y="${ny}" width="${barW}" height="${nh}" fill="${newColor}" rx="1"><title>${ptMinsToHHMM(s)}: ${newCount} nieuw</title></rect>`;
+                bars += `<rect x="${x}" y="${ny}" width="${barW}" height="${nh}" fill="${newColor}" rx="1"><title>${ptMinsToHHMM(s)}: ${newCount} nieuw${margeTip}</title></rect>`;
+            }
+            // High-capacity indicator: small teal dot at bar top when marge is notable
+            if (cap && cap.marge >= 10) {
+                const totalH  = (existCount + newCount) * yScale;
+                const dotY    = padT + chartH - totalH - 5;
+                const dotX    = x + barW / 2;
+                bars += `<circle cx="${dotX}" cy="${dotY}" r="2.5" fill="#14b8a6" opacity="0.85"><title>${ptMinsToHHMM(s)}: marge ${cap.marge}</title></circle>`;
             }
 
             // X-label on the hour
@@ -2997,6 +3113,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         ptLoadFromStorage();
         ptLoadPlanFromStorage();
+        ptLoadCapacityFromStorage();
         // Pre-update the badge even while on the actielijst tab
         const actionCount = ptData.filter(r => r.needsAction).length;
         const countEl = document.getElementById('ptActionCount');
