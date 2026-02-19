@@ -2388,36 +2388,53 @@
     // ── Format detection & import ──
 
     // Detect whether pasted/uploaded text is a CSV or a fixed-width schedule export.
-    // The schedule format has lines of: <RunName> <VehicleInt> <HH:MM> <HH:MM> [BreaksInfo]
+    // Two schedule line shapes are supported:
+    //   A (no type prefix):   Run  Vehicle  Out  In  [BreaksInfo]
+    //   B (with type prefix): Type  Run  Vehicle  Out  In  [BreaksInfo]
     function ptDetectFormat(text) {
         const lines = text.split('\n').filter(l => l.trim());
-        const schedRe = /^\s*\S+\s+\d+\s+\d{1,2}:\d{2}\s+\d{1,2}:\d{2}/;
-        const schedMatches = lines.filter(l => schedRe.test(l)).length;
-        // If 3+ lines look like schedule rows it's almost certainly a schedule export
-        return schedMatches >= 3 ? 'schedule' : 'csv';
+        const reA = /^\s*\S+\s+\d+\s+\d{1,2}:\d{2}\s+\d{1,2}:\d{2}/;
+        const reB = /^\s*\S+\s+\S+\s+\d+\s+\d{1,2}:\d{2}\s+\d{1,2}:\d{2}/;
+        const matches = lines.filter(l => reA.test(l) || reB.test(l)).length;
+        return matches >= 3 ? 'schedule' : 'csv';
     }
 
     // Parse fixed-width schedule text (the "Schedule Editor - Runs" export format).
-    // Recognises lines like:
-    //   7001-W-1200-1900-    7001 12:00 19:00       Vervallen[7h00]
-    //   PA-0845-1715-R    2586  8:45 17:15                 B[30]
-    //   Tilrun3            8094 13:30 22:00
-    // Lines that don't match (headers, tildes, blanks) are silently skipped.
+    //
+    // Supports two line layouts (auto-detected per line):
+    //   A – no type column:   7001-W-1200-1900-   7001 12:00 19:00  Vervallen[7h00]
+    //   B – with type column: Para  7001-W-1200-1900-  7001 12:00 19:00  Vervallen[7h00]
+    //
+    // In layout B the first token (e.g. "Para") is the service-type column that some
+    // schedule exports include before the run name. It is captured as the Type field
+    // but does not affect any calculations.
+    //
+    // Lines that match neither pattern (headers, tildes, Meerijder, …) are skipped.
     function ptParseScheduleText(text) {
-        const lineRe = /^\s*(\S+)\s+(\d+)\s+(\d{1,2}:\d{2})\s+(\d{1,2}:\d{2})\s*(.*?)\s*$/;
+        // Pattern A: <Run> <int> <HH:MM> <HH:MM> [BreaksInfo]
+        //   Works for:  7001-W-1200-1900-  7001  12:00  19:00
+        //               Tilrun3            8094  13:30  22:00
+        const reA = /^\s*(\S+)\s+(\d+)\s+(\d{1,2}:\d{2})\s+(\d{1,2}:\d{2})\s*(.*?)\s*$/;
+
+        // Pattern B: <Type> <Run> <int> <HH:MM> <HH:MM> [BreaksInfo]
+        //   Works for:  Para  7001-W-1200-1900-  7001  12:00  19:00
+        //               Para  Tilrun3             8094  13:30  22:00
+        // (first \S+ = type column, ignored in calculations)
+        const reB = /^\s*(\S+)\s+(\S+)\s+(\d+)\s+(\d{1,2}:\d{2})\s+(\d{1,2}:\d{2})\s*(.*?)\s*$/;
+
         const rows = [];
         text.split('\n').forEach(line => {
-            const m = line.match(lineRe);
-            if (!m) return;
-            if (m[1].toLowerCase() === 'run') return; // header row
-            rows.push(ptProcessRow({
-                Type: '',
-                Run: m[1],
-                Vehicle: m[2],
-                Out: m[3],
-                In: m[4],
-                BreaksInfo: m[5],
-            }));
+            // Try A first (more specific — second token must be a pure integer)
+            let m = line.match(reA);
+            if (m && m[1].toLowerCase() !== 'run') {
+                rows.push(ptProcessRow({ Type:'', Run:m[1], Vehicle:m[2], Out:m[3], In:m[4], BreaksInfo:m[5] }));
+                return;
+            }
+            // Try B (type prefix present — third token is the integer vehicle number)
+            m = line.match(reB);
+            if (m && m[2].toLowerCase() !== 'vehicle') {
+                rows.push(ptProcessRow({ Type:m[1], Run:m[2], Vehicle:m[3], Out:m[4], In:m[5], BreaksInfo:m[6] }));
+            }
         });
         return rows;
     }
