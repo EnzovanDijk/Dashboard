@@ -1302,53 +1302,6 @@
             margin-bottom: 14px;
         }
 
-        /* Perfectie panel — sits between chart and main table */
-        .pt-perfectie-wrap {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            padding: 14px 16px 12px;
-            margin-bottom: 14px;
-        }
-        .pt-perfectie-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.8rem;
-            margin-top: 6px;
-        }
-        .pt-perfectie-table th {
-            font-size: 0.72rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            padding: 3px 8px 5px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-            white-space: nowrap;
-        }
-        .pt-perfectie-table td {
-            padding: 5px 8px;
-            border-bottom: 1px solid rgba(48,54,61,0.4);
-            vertical-align: middle;
-        }
-        .pt-perfectie-table tbody tr:hover td { background: rgba(255,255,255,0.02); }
-        /* Shift indicators */
-        .pt-pf-none   { color: var(--text-muted); font-size: 0.75rem; }
-        .pt-pf-small  { color: #22c55e; font-weight: 700; }   /* ≤30 min */
-        .pt-pf-large  { color: #f97316; font-weight: 700; }   /* 60 min */
-        .pt-pf-new    { font-weight: 700; color: var(--text-primary); }
-        .pt-pf-dip    { font-size: 0.72rem; color: var(--text-muted); }
-        /* Summary bar below perfectie header */
-        .pt-pf-summary {
-            display: flex;
-            gap: 14px;
-            flex-wrap: wrap;
-            font-size: 0.78rem;
-            color: var(--text-muted);
-            margin-bottom: 6px;
-            padding: 4px 2px 0;
-        }
-        .pt-pf-summary b { color: var(--text-primary); }
-
         .pt-chart-header {
             display: flex;
             align-items: center;
@@ -1599,7 +1552,6 @@
                     <button class="btn btn-secondary pt-panel-btn" id="ptBtnPasdata"    onclick="ptTogglePanel('pasdata')">&#128203; Pas data</button>
                     <button class="btn btn-secondary pt-panel-btn" id="ptBtnPauzes"     onclick="ptTogglePanel('pauzes')">&#128203; Huidige pauzes</button>
                     <button class="btn btn-secondary pt-panel-btn" id="ptBtnDagverloop" onclick="ptTogglePanel('dagverloop')">&#128203; Dagverloop</button>
-                    <button class="btn btn-secondary btn-sm" id="ptBtnPerfectie" onclick="ptOpenPerfectie()" title="Bereken optimale pauze-spreiding op basis van dagverloop">&#9733; Perfectie</button>
                     <button class="btn btn-danger btn-sm" onclick="ptClear()">Wissen</button>
                     <button class="btn btn-danger btn-sm" onclick="ptConfirmClearAll()" title="Wis alle geïmporteerde data">&#128465; Alles wissen</button>
                 </div>
@@ -1647,20 +1599,6 @@
                     <button class="btn btn-secondary btn-sm" onclick="ptClearCapacity()">Wissen</button>
                 </div>
                 <div id="ptCapacityStatus" style="margin-top:6px;font-size:0.78rem;color:var(--text-muted)"></div>
-            </div>
-
-            <!-- Perfectie Panel (hidden until button clicked) -->
-            <div class="pt-perfectie-wrap" id="ptPerfectieWrap" style="display:none">
-                <div class="pt-chart-header">
-                    <span class="pt-chart-title">&#9733; Perfectie &mdash; pauze-optimalisatie vs dagverloop</span>
-                    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                        <button class="btn btn-primary btn-sm" onclick="ptApplyPerfectie()">Toepassen</button>
-                        <button class="btn btn-secondary btn-sm" onclick="ptClearAllShifts()">Shifts wissen</button>
-                        <button class="btn btn-secondary btn-sm" onclick="ptClosePerfectie()">Sluiten</button>
-                    </div>
-                </div>
-                <div id="ptPerfectieSummary" class="pt-pf-summary"></div>
-                <div id="ptPerfectieContent" style="overflow-x:auto"></div>
             </div>
 
             <!-- Chart Panel -->
@@ -2519,7 +2457,6 @@
         ptScheduleData = new Map();
         ptCapacityData = new Map();
         ptBreakShifts.clear();
-        ptPerfectieResults = [];
 
         // localStorage
         localStorage.removeItem(PT_STORAGE_KEY);
@@ -2546,9 +2483,8 @@
         const tog = document.getElementById('ptSpreadToggle');
         if (tog) tog.checked = false;
 
-        // Close any open panel + perfectie
+        // Close any open panel
         if (ptActivePanel) ptTogglePanel(ptActivePanel);
-        ptClosePerfectie();
 
         ptRender();
         showToast('Alle data gewist', 'info');
@@ -3209,213 +3145,6 @@
         return result;
     }
 
-    // ── Perfectie optimalisatie ──
-    //
-    // Doel: voor elke rit met een bestaande pauze (BreaksInfo bevat HH:MM) het beste
-    // 30-min tijdvak vinden dat de booking-dip in het dagverloop opvult.
-    //
-    // Kandidaat-verschuivingen t.o.v. huidige pauzetijd: -30, 0, +30, +60 min.
-    // Harde beperking: resultaat mag max 60 min van idealePauzetijdMins afwijken.
-    // Voorkeur: ≤ 30 min afwijking van ideaal.
-    //
-    // Score (hoger = beter):
-    //   + dipVoordeel   → lagere gepland t.o.v. dagtop = grotere dip = goede pauzeplek
-    //   − bezettingBoete → andere pauzes in hetzelfde slot willen we vermijden
-    //   − verschuifBoete  → kleine verschuiving verdient voorkeur
-    //   − ideaalBoete   → dichter bij ideaaltijd is beter
-
-    let ptPerfectieResults = [];
-
-    function ptComputePerfectie() {
-        // Normalisation: find peak gepland across the day
-        let maxGepland = 1;
-        ptCapacityData.forEach(c => { if (c.gepland > maxGepland) maxGepland = c.gepland; });
-        const hasCapacity = ptCapacityData.size > 0;
-
-        // Collect rows that have a parseable break time
-        const shiftable = [];
-        ptData.forEach((row, idx) => {
-            const t = ptParseBreakTimeFromInfo(row.BreaksInfo);
-            if (t === null) return;
-            shiftable.push({ row, idx, currentBreakMins: t });
-        });
-        if (shiftable.length === 0) return [];
-
-        // Sort by current break time so earlier breaks get first pick on slots
-        shiftable.sort((a, b) => a.currentBreakMins - b.currentBreakMins);
-
-        // Working occupancy: start from ptScheduleData, but remove the existing
-        // contributions of each shiftable break (we'll re-assign them below).
-        const workingOcc = new Map(ptScheduleData);
-        shiftable.forEach(({ currentBreakMins }) => {
-            const slot = Math.floor(currentBreakMins / 30) * 30;
-            workingOcc.set(slot, Math.max(0, (workingOcc.get(slot) ?? 0) - 1));
-        });
-
-        const CANDIDATES = [-30, 0, 30, 60]; // deltas from current break time (min)
-
-        const results = [];
-        shiftable.forEach(({ row, idx, currentBreakMins }) => {
-            const idealMins = row.idealePauzetijdMins;
-
-            let bestDelta = 0;
-            let bestScore = -Infinity;
-
-            CANDIDATES.forEach(delta => {
-                const newMins = ((currentBreakMins + delta) % 1440 + 1440) % 1440;
-                const newSlot = Math.floor(newMins / 30) * 30;
-
-                // Hard constraint: max 60 min from ideal time
-                if (idealMins !== null) {
-                    let dist = Math.abs(newMins - idealMins);
-                    if (dist > 720) dist = 1440 - dist; // midnight wrap
-                    if (dist > 60) return;
-                }
-
-                // Booking-dip benefit: lower gepland relative to day peak = bigger dip
-                let dipVoordeel = 0;
-                if (hasCapacity) {
-                    const cap = ptCapacityData.get(newSlot);
-                    if (cap) dipVoordeel = ((maxGepland - cap.gepland) / maxGepland) * 100;
-                }
-
-                // Occupancy penalty: avoid piling breaks in the same slot
-                const occ = workingOcc.get(newSlot) ?? 0;
-                const bezettingBoete = occ * 25;
-
-                // Shift penalty: prefer smaller changes (60 min costs more than 30)
-                const verschuifBoete = Math.abs(delta) * 0.6;
-
-                // Ideal-proximity penalty: prefer staying close to ideal time
-                let ideaalBoete = 0;
-                if (idealMins !== null) {
-                    let dist = Math.abs(newMins - idealMins);
-                    if (dist > 720) dist = 1440 - dist;
-                    ideaalBoete = dist * 0.4;
-                }
-
-                const score = dipVoordeel - bezettingBoete - verschuifBoete - ideaalBoete;
-                if (score > bestScore) { bestScore = score; bestDelta = delta; }
-            });
-
-            const newBreakMins = ((currentBreakMins + bestDelta) % 1440 + 1440) % 1440;
-            const newSlot      = Math.floor(newBreakMins / 30) * 30;
-            workingOcc.set(newSlot, (workingOcc.get(newSlot) ?? 0) + 1);
-
-            results.push({
-                dataIdx: idx, row, currentBreakMins,
-                idealMins, suggestedDelta: bestDelta, newBreakMins, score: bestScore
-            });
-        });
-
-        return results;
-    }
-
-    function ptOpenPerfectie() {
-        ptPerfectieResults = ptComputePerfectie();
-        document.getElementById('ptPerfectieWrap').style.display = 'block';
-        ptRenderPerfectieTable();
-    }
-
-    function ptClosePerfectie() {
-        document.getElementById('ptPerfectieWrap').style.display = 'none';
-    }
-
-    function ptClearAllShifts() {
-        ptBreakShifts.clear();
-        ptRender();
-        ptRenderChart();
-        if (document.getElementById('ptPerfectieWrap').style.display !== 'none') {
-            ptPerfectieResults = ptComputePerfectie();
-            ptRenderPerfectieTable();
-        }
-        showToast('Alle pauze-verschuivingen gewist', 'info');
-    }
-
-    function ptApplyPerfectie() {
-        ptBreakShifts.clear();
-        ptPerfectieResults.forEach(r => {
-            if (r.suggestedDelta !== 0) ptBreakShifts.set(r.dataIdx, r.suggestedDelta);
-        });
-        ptRender();
-        ptRenderChart();
-        const n = ptPerfectieResults.filter(r => r.suggestedDelta !== 0).length;
-        showToast(`${n} pauze${n !== 1 ? 's' : ''} verschoven`, 'success');
-    }
-
-    function ptRenderPerfectieTable() {
-        const content = document.getElementById('ptPerfectieContent');
-        const summary = document.getElementById('ptPerfectieSummary');
-        if (!content) return;
-
-        if (ptPerfectieResults.length === 0) {
-            if (summary) summary.innerHTML = '';
-            content.innerHTML = '<div class="pt-chart-empty" style="padding:16px 0">Laad huidige pauzes (en eventueel dagverloop) om de optimalisatie te berekenen.</div>';
-            return;
-        }
-
-        const shifted   = ptPerfectieResults.filter(r => r.suggestedDelta !== 0);
-        const sh30      = shifted.filter(r => Math.abs(r.suggestedDelta) <= 30).length;
-        const sh60      = shifted.filter(r => Math.abs(r.suggestedDelta) > 30).length;
-        const unchanged = ptPerfectieResults.length - shifted.length;
-
-        if (summary) summary.innerHTML =
-            `<span><b>${ptPerfectieResults.length}</b> bestaande pauzes</span>` +
-            `<span><b class="pt-pf-small">${sh30}</b> verschoven ≤&nbsp;30&nbsp;min</span>` +
-            `<span><b class="pt-pf-large">${sh60}</b> verschoven 60&nbsp;min</span>` +
-            `<span><b>${unchanged}</b> ongewijzigd</span>`;
-
-        const tbody = ptPerfectieResults.map(r => {
-            const veh     = r.row.Vehicle !== null && !isNaN(r.row.Vehicle) ? r.row.Vehicle : '';
-            const curStr  = ptMinsToHHMM(r.currentBreakMins);
-            const newStr  = ptMinsToHHMM(r.newBreakMins);
-            const ideStr  = r.idealMins !== null ? ptMinsToHHMM(r.idealMins) : '—';
-            const d       = r.suggestedDelta;
-
-            let shiftCls, shiftLbl;
-            if (d === 0)            { shiftCls = 'pt-pf-none';  shiftLbl = '—'; }
-            else if (Math.abs(d) <= 30) { shiftCls = 'pt-pf-small'; shiftLbl = `${d > 0 ? '+' : ''}${d}m`; }
-            else                    { shiftCls = 'pt-pf-large'; shiftLbl = `${d > 0 ? '+' : ''}${d}m`; }
-
-            const newSlot = Math.floor(r.newBreakMins / 30) * 30;
-            const cap     = ptCapacityData.get(newSlot);
-            const dipCell = cap
-                ? `<span class="pt-pf-dip">${cap.gepland} ritten &nbsp;|&nbsp; marge ${cap.marge}</span>`
-                : '<span class="pt-pf-dip">—</span>';
-
-            const newCell = d !== 0
-                ? `<span class="pt-pf-new">${newStr}</span>`
-                : `<span class="pt-pf-none">${curStr}</span>`;
-
-            // Distance from ideal (shown for context when ≥ 30 min)
-            let ideaalDist = '';
-            if (r.idealMins !== null && d !== 0) {
-                let dist = Math.abs(r.newBreakMins - r.idealMins);
-                if (dist > 720) dist = 1440 - dist;
-                if (dist >= 30) ideaalDist = `<span class="pt-pf-dip" style="margin-left:4px">(${dist}m v ideaal)</span>`;
-            }
-
-            return `<tr>
-                <td>${escapeHtml(r.row.Run)}</td>
-                <td style="font-weight:700">${veh}</td>
-                <td>${curStr}</td>
-                <td style="color:var(--text-muted)">${ideStr}</td>
-                <td class="${shiftCls}">${shiftLbl}</td>
-                <td>${newCell}${ideaalDist}</td>
-                <td>${dipCell}</td>
-            </tr>`;
-        }).join('');
-
-        content.innerHTML = `<table class="pt-perfectie-table">
-            <thead><tr>
-                <th>Run</th><th>Wagen</th>
-                <th>Huidige pauze</th><th>Ideaal</th>
-                <th>Shift</th><th>Nieuwe tijd</th>
-                <th>Dagverloop op nieuw slot</th>
-            </tr></thead>
-            <tbody>${tbody}</tbody>
-        </table>`;
-    }
 
     // ── Render ──
     function ptRender() {
