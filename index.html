@@ -2638,16 +2638,14 @@
     // ── Format detection & import ──
 
     // Detect whether pasted/uploaded text is a CSV or a fixed-width schedule export.
-    // Three schedule line shapes are supported:
-    //   A (no type prefix):          Run  Vehicle  Out  In  [BreaksInfo]
-    //   B (with type prefix):        Type  Run  Vehicle  Out  In  [BreaksInfo]
-    //   C (type prefix, no vehicle): Type  Run(with-hyphen)  Out  In  [BreaksInfo]
+    // Two schedule line shapes are supported:
+    //   A (no type prefix):   Run  Vehicle  Out  In  [BreaksInfo]
+    //   B (with type prefix): Type  Run  Vehicle  Out  In  [BreaksInfo]
     function ptDetectFormat(text) {
         const lines = text.split('\n').filter(l => l.trim());
         const reA = /^\s*\S+\s+\d+\s+\d{1,2}:\d{2}\s+\d{1,2}:\d{2}/;
         const reB = /^\s*\S+\s+\S+\s+\d+\s+\d{1,2}:\d{2}\s+\d{1,2}:\d{2}/;
-        const reC = /^\s*\S+\s+\S+-\S*\s+\d{1,2}:\d{2}\s+\d{1,2}:\d{2}/;
-        const matches = lines.filter(l => reA.test(l) || reB.test(l) || reC.test(l)).length;
+        const matches = lines.filter(l => reA.test(l) || reB.test(l)).length;
         return matches >= 3 ? 'schedule' : 'csv';
     }
 
@@ -2674,13 +2672,6 @@
         // (first \S+ = type column, ignored in calculations)
         const reB = /^\s*(\S+)\s+(\S+)\s+(\d+)\s+(\d{1,2}:\d{2})\s+(\d{1,2}:\d{2})\s*(.*?)\s*$/;
 
-        // Pattern C: <Type> <Run> <HH:MM> <HH:MM> [BreaksInfo]  — no separate vehicle column
-        //   Works for:  Para  7131-A-0800-1400-  8:00  14:00  Ziek[6h00]
-        //               Para  PN-0845-1400-R     8:45  14:00  Ziek[5h15]
-        // Vehicle is extracted from the leading digits of the Run name (e.g. 7131 from 7131-A-…).
-        // Runs without a numeric prefix (PN-…, PW-…) get no vehicle number.
-        const reC = /^\s*(\S+)\s+(\S+-\S*)\s+(\d{1,2}:\d{2})\s+(\d{1,2}:\d{2})\s*(.*?)\s*$/;
-
         const rows = [];
         text.split('\n').forEach(line => {
             // Try A first (more specific — second token must be a pure integer)
@@ -2693,13 +2684,6 @@
             m = line.match(reB);
             if (m && m[2].toLowerCase() !== 'vehicle') {
                 rows.push(ptProcessRow({ Type:m[1], Run:m[2], Vehicle:m[3], Out:m[4], In:m[5], BreaksInfo:m[6] }));
-                return;
-            }
-            // Try C (type prefix + run name with hyphen, no vehicle column)
-            m = line.match(reC);
-            if (m && m[2].toLowerCase() !== 'vehicle') {
-                const vehMatch = m[2].match(/^(\d+)/);
-                rows.push(ptProcessRow({ Type:m[1], Run:m[2], Vehicle: vehMatch ? vehMatch[1] : '', Out:m[3], In:m[4], BreaksInfo:m[5] }));
             }
         });
         return rows;
@@ -3205,6 +3189,7 @@
             emptyText.innerHTML = ptData.length === 0
                 ? 'Nog geen pauzetijden geladen.<br>Upload een CSV of plak de inhoud hierboven.'
                 : 'Geen rijen komen overeen met het huidige filter.';
+            ptRenderChart();
             return;
         }
 
